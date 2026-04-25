@@ -33,7 +33,7 @@ class ModelRegistry:
         self._load_generic_model("recommender", self._load_recommender_logic)
         
         # 4. Детектор аномалий (Будущая модель)
-        # self._load_generic_model("anomaly_detector", self._load_anomaly_logic)
+        self._load_generic_model("anomaly_detector", self._load_anomaly_logic)
 
         loaded_count = sum(1 for v in self._loaded.values() if v)
         logger.info(f"✅ Загрузка завершена. Моделей активно: {loaded_count}")
