@@ -1,50 +1,83 @@
 import os
-import torch
 import math
+import torch
 import re
 from transformers import AutoTokenizer
 from .model_definition import FinanceNLPModel
 
-class NLPParser:
-    def __init__(self):
-        self.device = torch.device("cpu")
-        self.model_path = os.path.join(os.path.dirname(__file__), "trained_models/rubert_nlp/weights.pt")
-        self.tok_path = os.path.join(os.path.dirname(__file__), "trained_models/rubert_nlp/tokenizer")
+class FinanceParser:
+    """
+    Парсер финансовых транзакций (ПОЛНАЯ ВЕРСИЯ).
+    """
+    def __init__(self, model_dir: str):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        checkpoint_path = os.path.join(model_dir, "checkpoint.pt")
+        tokenizer_path = os.path.join(model_dir, "tokenizer")
         
-        if os.path.exists(self.model_path):
-            self.tokenizer = AutoTokenizer.from_pretrained(self.tok_path)
-            self.model = FinanceNLPModel("DeepPavlov/rubert-base-cased")
-            self.model.load_state_dict(torch.load(self.model_path, map_location="cpu"))
-            self.model.eval()
-            self.loaded = True
-        else:
-            self.loaded = False
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+        
+        conf = checkpoint["config"]
+        self.model = FinanceNLPModel(conf["pretrained_model_name"], conf["num_bio_labels"])
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.model.to(self.device)
+        self.model.eval()
+        
+        self.max_length = conf["max_seq_length"]
+        self.bio_labels = {0: "O", 1: "B-DESC", 2: "I-DESC"}
 
-    def parse(self, text: str):
-        if not self.loaded:
-            # Fallback на регулярки если модель не обучена
-            amt = re.search(r'(\d+)', text)
-            return {"amount": float(amt.group(1)) if amt else 0, "description": text, "is_income": False}
+    def _extract_description_from_bio(self, tokens, bio_preds, attention_mask):
+        description_tokens = []
+        in_description = False
+        for i, (token, bio, mask) in enumerate(zip(tokens, bio_preds, attention_mask)):
+            if mask == 0: break
+            if bio == 1: # B-DESC
+                in_description = True
+                description_tokens.append(token)
+            elif bio == 2 and in_description: # I-DESC
+                description_tokens.append(token)
+            else:
+                if in_description: break
+        
+        if not description_tokens: return ""
+        text = self.tokenizer.convert_tokens_to_string(description_tokens)
+        text = text.strip()
+        text = re.sub(r'\s+', ' ', text)
+        return text
 
-        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=64)
+    def parse(self, text: str) -> dict:
+        encoding = self.tokenizer(text, max_length=self.max_length, padding="max_length", truncation=True, return_tensors="pt")
+        input_ids = encoding["input_ids"].to(self.device)
+        attention_mask = encoding["attention_mask"].to(self.device)
+        
         with torch.no_grad():
-            p_amt, p_inc, p_bio = self.model(inputs["input_ids"], inputs["attention_mask"])
+            amount_pred, income_logits, bio_logits = self.model(input_ids, attention_mask)
         
-        amount = math.exp(p_amt.item())
-        is_income = torch.argmax(p_inc, dim=-1).item() == 1
+        log_amount = amount_pred.squeeze().item()
+        amount = round(math.exp(log_amount), 2)
         
-        # Извлекаем описание из BIO тегов
-        tokens = self.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
-        bio_preds = torch.argmax(p_bio, dim=-1)[0].tolist()
+        income_probs = torch.softmax(income_logits, dim=-1).squeeze()
+        is_income = income_probs[1].item() > 0.5
         
-        desc_tokens = []
-        for i, (tok, pred) in enumerate(zip(tokens, bio_preds)):
-            if pred in [1, 2]: # B-DESC или I-DESC
-                desc_tokens.append(tok)
+        bio_preds = bio_logits.argmax(dim=-1).squeeze().cpu().tolist()
+        tokens = self.tokenizer.convert_ids_to_tokens(input_ids.squeeze().cpu().tolist())
+        att_mask = attention_mask.squeeze().cpu().tolist()
         
-        description = self.tokenizer.convert_tokens_to_string(desc_tokens)
+        description = self._extract_description_from_bio(tokens, bio_preds, att_mask)
+        
         return {
-            "amount": round(amount, 2),
+            "amount": float(amount),
             "description": description or text,
-            "is_income": is_income
+            "is_income": bool(is_income),
+            "confidence": {
+                "income_confidence": round(float(income_probs[1 if is_income else 0].item()), 4),
+                "amount_log": round(log_amount, 4)
+            }
         }
+
+def parse_text(text: str) -> dict:
+    from .model_loader import registry
+    parser = registry.get("nlp_parser")
+    if not parser:
+        return {"amount": 0, "description": text, "is_income": False, "error": "Model not loaded"}
+    return parser.parse(text)
