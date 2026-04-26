@@ -1,0 +1,44 @@
+# Виртуальные окружения Python
+venv/
+.venv/
+env/
+ENV/
+bin/
+lib/
+include/
+
+# Кэш Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+.ipynb_checkpoints/
+
+# ML Данные и Модели (тяжелые файлы)
+ml_training/**/data/*.csv
+ml_training/**/data/*.json
+ml_training/**/trained_models/
+backend/app/ml/trained_models/
+*.safetensors
+*.pt
+*.pth
+*.joblib
+*.pkl
+
+# Фронтенд (Node.js)
+node_modules/
+dist/
+build/
+.eslintcache
+
+# Переменные окружения (секреты)
+.env
+.env.local
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

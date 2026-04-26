@@ -3,21 +3,31 @@ import joblib
 import numpy as np
 import pandas as pd
 import os
-from typing import List
+from typing import List, Dict, Any
 
 class FeatureExtractor:
     EXPENSE_CATEGORIES = ["groceries", "restaurants", "transport", "subscriptions", "shopping", "utilities", "health", "entertainment", "education"]
     
     def extract(self, transactions: list[dict]) -> dict:
         df = pd.DataFrame(transactions)
+        
+        # Если бэкенд не передает weekend, считаем что это будни (0)
+        if "weekend" not in df.columns:
+            df["weekend"] = 0
+            
         exp = df[df["type"] == "expense"]
         inc = df[df["type"] == "income"]
         f = {}
+        
         ti = inc["amount"].sum() if not inc.empty else 0
         te = exp["amount"].sum() if not exp.empty else 0
+        
         f["total_income"], f["total_expenses"] = ti, te
         f["savings_rate"] = (ti - te) / ti if ti > 0 else 0
         f["expense_to_income_ratio"] = te / ti if ti > 0 else 1
+        
+        # Новый признак: доля трат в выходные
+        f["weekend_spend_ratio"] = exp[exp["weekend"] == 1]["amount"].sum() / te if te > 0 else 0
         
         for cat in self.EXPENSE_CATEGORIES:
             ce = exp[exp["category"] == cat]
@@ -25,14 +35,17 @@ class FeatureExtractor:
             f[f"count_{cat}"] = len(ce)
             f[f"avg_{cat}"] = ce["amount"].mean() if not ce.empty else 0
             f[f"share_{cat}"] = f[f"total_{cat}"] / te if te > 0 else 0
+            # Новый признак: стабильность трат в категории
+            f[f"std_{cat}"] = ce["amount"].std() if len(ce) > 1 else 0
         
         if not exp.empty:
             f["num_transactions"] = len(exp)
             f["avg_transaction"] = exp["amount"].mean()
             f["max_transaction"] = exp["amount"].max()
-            f["unique_merchants"] = exp["merchant"].nunique()
+            f["unique_merchants"] = exp["merchant"].nunique() if "merchant" in exp.columns else 0
         else:
-            for k in ["num_transactions", "avg_transaction", "max_transaction", "unique_merchants"]: f[k] = 0
+            for k in ["num_transactions", "avg_transaction", "max_transaction", "unique_merchants"]:
+                f[k] = 0
             
         f["impulse_ratio"] = f["max_transaction"] / f["avg_transaction"] if f["avg_transaction"] > 0 else 0
         f["daily_frequency"] = f["num_transactions"] / 30
@@ -55,8 +68,12 @@ class FinanceRecommender:
         self.fe = FeatureExtractor()
 
     def predict(self, transactions: list[dict]) -> list[dict]:
-        if not transactions: return []
+        if not transactions:
+            return []
+            
         features = self.fe.extract(transactions)
+        
+        # Выравниваем колонки по списку из модели
         X = pd.DataFrame([features])[self.feature_names].fillna(0).replace([np.inf, -np.inf], 0)
         
         pred_idx = self.model.predict(X)[0]
@@ -64,14 +81,19 @@ class FinanceRecommender:
         
         recs = self.recommendations_map.get(profile_name, []).copy()
         
-        # Доп. эвристики (как в твоем файле)
+        # Твои эвристики
         if features.get("expense_to_income_ratio", 0) > 0.9:
-            recs.append({"title": "⚠️ Критический уровень расходов", "description": f"Вы тратите {features['expense_to_income_ratio']*100:.0f}% дохода.", "potential_savings": 1000})
-        
+            recs.append({
+                "title": "⚠️ Критический уровень расходов",
+                "description": f"Вы тратите {features['expense_to_income_ratio']*100:.0f}% дохода. Рекомендуется снизить планку до 80%.",
+                "potential_savings": 1000
+            })
+            
         return recs
 
 def get_recommendations(transactions: list[dict]) -> list[dict]:
     from .model_loader import registry
     rec = registry.get("recommender")
-    if not rec: return []
+    if not rec:
+        return []
     return rec.predict(transactions)

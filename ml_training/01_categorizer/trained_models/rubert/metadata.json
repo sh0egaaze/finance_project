@@ -1,0 +1,28 @@
+{
+  "model_name": "cointegrated/rubert-tiny2",
+  "model_type": "rubert",
+  "best_epoch": 5,
+  "best_accuracy": 0.998075,
+  "num_epochs": 10,
+  "batch_size": 128,
+  "learning_rate": 2e-05,
+  "max_length": 64,
+  "num_categories": 20,
+  "train_samples": 160000,
+  "test_samples": 40000,
+  "train_losses": [
+    2.0602459018707275,
+    0.13437752289772034,
+    0.019071533644199373,
+    0.009317374593019486,
+    0.006323852363228798
+  ],
+  "val_accuracies": [
+    0.984575,
+    0.997275,
+    0.99805,
+    0.997525,
+    0.998075
+  ],
+  "version": "1.0.0"
+}
