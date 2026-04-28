@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, EmailStr, field_validator
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -119,9 +120,16 @@ async def register(data: UserCreate, db: Session = Depends(get_db)):
         email_notifications=True,
     )
     
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Пользователь с таким email уже существует"
+    )
     
     return {
         "id": user.id,

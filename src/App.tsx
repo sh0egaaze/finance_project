@@ -84,7 +84,8 @@ export default function App() {
     date: string;
   }) => {
     await api.createTransaction({
-      amount: data.type === 'expense' ? -Math.abs(data.amount) : Math.abs(data.amount),
+      amount: Math.abs(data.amount),       
+      is_income: data.type === 'income',   
       description: data.description,
       category_id: data.category_id || undefined,
       source: data.source,

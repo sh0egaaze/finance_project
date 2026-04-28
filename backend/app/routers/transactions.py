@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, condecimal, Field
 from typing import Optional
 from decimal import Decimal
@@ -28,10 +29,8 @@ async def smart_input(data: dict, db: Session = Depends(get_db), user: User = De
     }
 
 class TransactionCreate(BaseModel):
-    description: str = Field(..., min_length=1, max_length=500, 
-                             description="Описание транзакции")
-    amount: Decimal = Field(..., gt=0, 
-                            description="Сумма > 0. Знак определяется полем is_income")
+    description: str = Field(..., min_length=1, max_length=500, description="Описание транзакции")
+    amount: Decimal = Field(..., gt=0, description="Сумма > 0. Знак определяется полем is_income")
     is_income: bool = Field(..., description="True = доход, False = расход")
     category_id: Optional[int] = Field(None, description="ID категории")
     transaction_date: Optional[str] = None
@@ -88,7 +87,14 @@ async def update_transaction(
     for field, value in update_data.items():
         setattr(tx, field, value)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Некорректные данные: категория не существует или нарушение ограничений БД"
+        )
     return {"status": "updated"}
 
 @router.get("/{tx_id}")
