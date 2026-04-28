@@ -1,7 +1,7 @@
 """
 Конфигурация приложения
 """
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict, field_validator
 from functools import lru_cache
 from typing import List
 
@@ -15,6 +15,19 @@ class Settings(BaseSettings):
     # JWT
     SECRET_KEY: str
     # Для генерации ключа: python -c "import secrets; print(secrets.token_hex(32))"
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def secret_key_strong(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError(
+                "SECRET_KEY слишком короткий! "
+                "Сгенерируй: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        if v in ("secret", "change-me", "super-secret-key-change-in-production"):
+            raise ValueError("SECRET_KEY содержит дефолтное значение!")
+        return v
+    
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 часа
     

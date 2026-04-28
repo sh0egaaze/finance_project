@@ -27,10 +27,10 @@ services:
       dockerfile: Dockerfile
     container_name: finance_backend
     environment:
-      DATABASE_URL: postgresql://finance_user:1029384756Aa@db:5432/finance_app
-      SECRET_KEY: ${SECRET_KEY:-super-secret-key-change-in-production}
+      DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY}
       DEBUG: ${DEBUG:-false}
-      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173,http://frontend:80
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
     ports:
       - "8000:8000"
     depends_on:

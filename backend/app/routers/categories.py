@@ -4,6 +4,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 
 from app.database import get_db
@@ -87,7 +88,7 @@ async def create_category(
     """Создать новую категорию"""
     existing = db.query(Category).filter(Category.code == data.code).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Категория с таким кодом уже существует")
+        raise HTTPException(status_code=409, detail="Категория с таким кодом уже существует")
     
     category = Category(
         code=data.code,
@@ -102,6 +103,18 @@ async def create_category(
         is_system=False,
     )
     db.add(category)
-    db.commit()
-    db.refresh(category)
+
+    try:
+        db.commit()
+        db.refresh(category)
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"Ошибка целостности данных: {str(e.orig)}"
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
+
     return category
