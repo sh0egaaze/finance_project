@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/finance_app"
     
     # JWT
-    SECRET_KEY: str = "your-super-secret-key-change-in-production-minimum-32-chars"
+    SECRET_KEY: str
+    # Для генерации ключа: python -c "import secrets; print(secrets.token_hex(32))"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 часа
     

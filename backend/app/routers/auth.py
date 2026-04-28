@@ -1,13 +1,13 @@
 """
 Роутер аутентификации
 """
-import os
+from app.config import get_settings
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 
@@ -17,9 +17,10 @@ from app.models import User
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Настройки
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 часа
+_settings = get_settings()
+SECRET_KEY = _settings.SECRET_KEY          
+ALGORITHM = _settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = _settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
@@ -30,6 +31,13 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Пароль должен быть не менее 8 символов")
+        return v
 
 
 class UserResponse(BaseModel):
@@ -105,7 +113,7 @@ async def register(data: UserCreate, db: Session = Depends(get_db)):
     
     user = User(
         email=data.email,
-        hashed_password=get_password_hash(data.password),
+        hashed_password=get_password_hash(data.password),  
         full_name=data.full_name,
         is_active=True,
         email_notifications=True,
