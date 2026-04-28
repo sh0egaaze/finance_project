@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, condecimal, Field
 from typing import Optional
 from decimal import Decimal
+from datetime import datetime
 from app.database import get_db
 from app.models import Transaction, Category, User
 from app.routers.auth import get_current_user
@@ -41,21 +42,33 @@ class TransactionUpdate(BaseModel):
     category_id: Optional[int] = None
     category_manual: Optional[bool] = None
 
-    def get_own_transaction(
+class TransactionResponse(BaseModel):
+    id: int
+    description: str
+    amount: Decimal
+    is_income: bool
+    category_id: Optional[int]
+    transaction_date: Optional[datetime]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+def get_own_transaction(
     tx_id: int,
     db: Session,
     user: User,
-    ) -> Transaction:
-            tx = db.query(Transaction).filter(
-            Transaction.id == tx_id,
-            Transaction.user_id == user.id,
-            ).first()
-            if not tx:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Транзакция не найдена или у вас нет доступа"
-                )
-            return tx
+) -> Transaction:
+    tx = db.query(Transaction).filter(
+        Transaction.id == tx_id,
+        Transaction.user_id == user.id,   
+    ).first()
+    if not tx:
+        raise HTTPException(
+            status_code=404,
+            detail="Транзакция не найдена или у вас нет доступа",
+        )
+    return tx
 
 @router.put("/{tx_id}")
 async def update_transaction(
