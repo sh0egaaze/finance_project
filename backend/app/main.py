@@ -4,6 +4,9 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from loguru import logger
 
 from app.database import engine, Base
@@ -11,6 +14,7 @@ from app.models import (
     User, Category, CurrencyRate, Transaction, 
     Reminder, NotificationHistory, Prediction, AuditLog
 )
+from app.config import get_settings
 from app.routers import (
     auth_router,
     transactions_router,
@@ -39,16 +43,15 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Остановка Finance App Backend...")
 
-
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="Finance App API",
     description="API для управления личными финансами",
     version="1.0.0",
     lifespan=lifespan,
 )
-
-from app.database import engine, Base
-from app.config import get_settings
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 settings = get_settings()
 

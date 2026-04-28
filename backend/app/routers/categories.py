@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models import Category
+from app.models import Category, User
+from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -78,7 +79,11 @@ async def get_category(category_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=CategoryResponse)
-async def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
+async def create_category(
+    data: CategoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  
+):
     """Создать новую категорию"""
     existing = db.query(Category).filter(Category.code == data.code).first()
     if existing:

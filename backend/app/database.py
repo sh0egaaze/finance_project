@@ -4,13 +4,17 @@
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from app.config import get_settings
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://finance_user:1029384756Aa@db:5432/finance_app"
+_settings = get_settings()
+
+engine = create_engine(
+    _settings.DATABASE_URL,
+    echo=_settings.DEBUG,   
+    pool_pre_ping=True,     
+    pool_size=5,
+    max_overflow=10,
 )
-
-engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

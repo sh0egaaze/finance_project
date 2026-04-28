@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
+from cryptography.fernet import Fernet
+import base64, hashlib
 import os
 
 from app.database import get_db
@@ -59,8 +61,14 @@ async def connect_tbank(
     if not data.token or not data.token.startswith("t."):
         raise HTTPException(status_code=400, detail="Неверный формат токена. Токен должен начинаться с 't.'")
     
-    # Сохраняем токен (в реальном приложении - шифровать!)
-    current_user.tbank_token_encrypted = data.token
+    _s = get_settings()
+    key = base64.urlsafe_b64encode(
+        hashlib.sha256(_s.SECRET_KEY.encode()).digest()
+    )
+    f = Fernet(key)
+    encrypted = f.encrypt(data.token.encode()).decode()
+
+    current_user.tbank_token_encrypted = encrypted
     current_user.updated_at = datetime.utcnow()
     db.commit()
     
@@ -210,10 +218,15 @@ async def sync_tbank(
             "transactions_added": added_count,
         }
         
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="Таймаут запроса к Т-Банк API")
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=502, detail="Не удалось подключиться к Т-Банк API")
+    except HTTPException:
+        raise  # Пробрасываем HTTPException без изменений
     except Exception as e:
-        # При любой ошибке - демо-данные
-        return await _add_demo_transactions(db, current_user)
-
+        logger.error(f"Неожиданная ошибка при синхронизации Т-Банк: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка при синхронизации")
 
 async def _add_demo_transactions(db: Session, user: User):
     """Добавить демо-транзакции"""
