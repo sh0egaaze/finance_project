@@ -4,6 +4,7 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
+from dateutil.relativedelta import relativedelta
 from loguru import logger
 from datetime import datetime
 
@@ -64,10 +65,19 @@ async def process_reminders():
             rem.current_count += 1
             rem.last_sent_date = now
             
-            if rem.repeat_count and rem.current_count >= rem.repeat_count:
+            # Вычисляем следующую дату на основе частоты
+            if rem.frequency == "daily":
+                rem.next_reminder_date = now + relativedelta(days=1)
+            elif rem.frequency == "weekly":
+                rem.next_reminder_date = now + relativedelta(weeks=1)
+            elif rem.frequency == "monthly":
+                rem.next_reminder_date = now + relativedelta(months=1)
+            elif rem.frequency == "once":
                 rem.is_completed = True
             
-            # (Тут логика вычисления следующей даты в зависимости от частоты)
+            # Проверяем лимит повторений
+            if rem.repeat_count and rem.current_count >= rem.repeat_count:
+                rem.is_completed = True
             
         db.commit()
     except Exception as e:
