@@ -16,15 +16,19 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     # Для генерации ключа: python -c "import secrets; print(secrets.token_hex(32))"
 
+    KNOWN_WEAK_KEYS = (
+        "secret",
+        "change-me",
+        "super-secret-key-change-in-production",
+        "change-this-to-a-very-long-random-string-at-least-32-characters",
+    )
+
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_strong(cls, v: str) -> str:
         if len(v) < 32:
-            raise ValueError(
-                "SECRET_KEY слишком короткий! "
-                "Сгенерируй: python -c \"import secrets; print(secrets.token_hex(32))\""
-            )
-        if v in ("secret", "change-me", "super-secret-key-change-in-production"):
+            raise ValueError("SECRET_KEY слишком короткий!")
+        if v in KNOWN_WEAK_KEYS:
             raise ValueError("SECRET_KEY содержит дефолтное значение!")
         return v
     
