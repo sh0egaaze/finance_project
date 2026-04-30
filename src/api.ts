@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-const API_URL = '/api/v1';
+const API_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 // Создаём axios instance
 const axiosInstance: AxiosInstance = axios.create({

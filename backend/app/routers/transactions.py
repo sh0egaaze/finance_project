@@ -112,8 +112,15 @@ async def delete_transaction(
     user: User = Depends(get_current_user)
 ):
     tx = get_own_transaction(tx_id, db, user)
-    db.delete(tx)
-    db.commit()
+    try:
+        db.delete(tx)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Ошибка при удалении транзакции"
+        )
 
 @router.get("", response_model=list[TransactionResponse])
 async def get_transactions(

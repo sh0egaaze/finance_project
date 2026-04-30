@@ -36,6 +36,8 @@ build/
 # Переменные окружения (секреты)
 .env
 .env.local
+backend/.env
+*.env
 
 # Системные файлы
 .DS_Store

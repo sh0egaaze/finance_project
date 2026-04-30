@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     """Настройки приложения из переменных окружения"""
     
     # База данных
-    DATABASE_URL: str = "postgresql://user:password@localhost:5432/finance_app"
+    DATABASE_URL: str
     
     # JWT
     SECRET_KEY: str
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
     
     # Приложение
-    DEBUG: bool = True
+    DEBUG: bool = False
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     
     @property

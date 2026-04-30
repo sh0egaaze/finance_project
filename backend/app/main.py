@@ -2,7 +2,9 @@
 Главный файл FastAPI приложения
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -49,6 +51,9 @@ app = FastAPI(
     description="API для управления личными финансами",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -82,3 +87,11 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    logger.error(f"DB Error: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Ошибка базы данных. Повторите позже."}
+    )
