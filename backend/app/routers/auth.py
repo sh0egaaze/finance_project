@@ -62,6 +62,24 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+DEFAULT_CATEGORIES = [
+    {"code": "food",      "name": "Еда",       "icon": "🍕", "color": "#ef4444", "is_expense": True},
+    {"code": "transport", "name": "Транспорт", "icon": "🚗", "color": "#f97316", "is_expense": True},
+    {"code": "housing",   "name": "Жильё",     "icon": "🏠", "color": "#8b5cf6", "is_expense": True},
+    {"code": "health",    "name": "Здоровье",  "icon": "💊", "color": "#06b6d4", "is_expense": True},
+    {"code": "salary",    "name": "Зарплата",  "icon": "💰", "color": "#22c55e", "is_income": True},
+]
+
+def create_default_categories(user_id: int, db: Session):
+    for cat_data in DEFAULT_CATEGORIES:
+        cat = Category(
+            user_id=user_id,
+            is_system=True,
+            **cat_data,
+        )
+        db.add(cat)
+    db.commit()
+
 
 # ===== Вспомогательные функции =====
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -74,7 +92,7 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -124,6 +142,7 @@ async def register(data: UserCreate, db: Session = Depends(get_db)):
         db.add(user)
         db.commit()
         db.refresh(user)
+        create_default_categories(user.id, db)
     except IntegrityError:
         db.rollback()
         raise HTTPException(
