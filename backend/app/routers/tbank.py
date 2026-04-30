@@ -105,24 +105,31 @@ async def sync_tbank(
             detail="Т-Банк не подключён. Сначала подключите аккаунт в настройках."
         )
     
-    token = current_user.tbank_token_encrypted
+    _s = get_settings()
+    key = base64.urlsafe_b64encode(hashlib.sha256(_s.SECRET_KEY.encode()).digest())
+    f = Fernet(key)
+
+    try:
+        token = f.decrypt(current_user.tbank_token_encrypted.encode()).decode()
+    except Exception:
+        raise HTTPException(status_code=500, detail="Ошибка дешифрования токена")
     
     # Пытаемся получить операции из Sandbox API
     try:
-        import requests
-        
+        import httpx
         # Получаем аккаунты
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
         
-        accounts_response = requests.post(
-            "https://sandbox-invest-public-api.tinkoff.ru/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
-            headers=headers,
-            json={},
-            timeout=10
-        )
+        async with httpx.AsyncClient() as client:
+            accounts_response = await client.post(
+                "https://sandbox-invest-public-api.tinkoff.ru/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
+                headers=headers,
+                json={},
+                timeout=10
+            )
         
         if accounts_response.status_code != 200:
             # Токен невалидный - добавляем демо-транзакции

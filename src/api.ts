@@ -12,10 +12,10 @@ const axiosInstance: AxiosInstance = axios.create({
 
 // Интерцептор для добавления токена
 axiosInstance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  const axiosInstance = axios.create({
+    baseURL: API_URL,
+    withCredentials: true 
+  });
   return config;
 });
 

@@ -33,7 +33,7 @@ class Settings(BaseSettings):
         return v
     
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 часа
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # Т-Банк API
     TBANK_API_URL: str = "https://business.tbank.ru/openapi"

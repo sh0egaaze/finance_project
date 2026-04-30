@@ -36,8 +36,14 @@ class UserCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Пароль должен быть не менее 8 символов")
+        if len(v) < 12:
+            raise ValueError("Пароль должен быть не менее 12 символов")
+        if not any(char.isdigit() for char in v):
+            raise ValueError("Пароль должен содержать хотя бы одну цифру")
+        if not any(char.isupper() for char in v):
+            raise ValueError("Пароль должен содержать хотя бы одну заглавную букву")
+        if not any(char in "!@#$%^&*()-_+=" for char in v):
+            raise ValueError("Пароль должен содержать спецсимвол (!@#$%^&*...)")
         return v
 
 
