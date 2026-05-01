@@ -1,12 +1,11 @@
 """
-Планировщик фоновых задач
+Планировщик уведомлений и напоминаний
 """
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
-from dateutil.relativedelta import relativedelta
-from loguru import logger
 from datetime import datetime
+from loguru import logger
 
 from .database import SessionLocal
 from .models import User, Reminder, NotificationHistory, AuditLog
@@ -14,8 +13,9 @@ from .services.email_service import get_email_service
 
 scheduler = AsyncIOScheduler()
 
+
 async def process_reminders():
-    """Обработка и отправка напоминаний"""
+    """Обработка и отправка уведомлений"""
     try:
         db: Session = SessionLocal()
     except Exception as e:
@@ -25,7 +25,7 @@ async def process_reminders():
     now = datetime.utcnow()
     
     try:
-        # Находим активные напоминания, время которых пришло
+        # Находим активные напоминания, время которых наступило
         due_reminders = db.query(Reminder).filter(
             Reminder.is_active == True,
             Reminder.is_completed == False,
@@ -35,7 +35,8 @@ async def process_reminders():
         for rem in due_reminders:
             try:
                 user = db.query(User).get(rem.user_id)
-                if not user: continue
+                if not user:
+                    continue
                 
                 target_email = user.notification_email or user.email
                 success = False
@@ -48,7 +49,7 @@ async def process_reminders():
                     except Exception as e:
                         error_msg = str(e)
                 
-                # Записываем в историю
+                # Сохраняем в историю
                 history = NotificationHistory(
                     reminder_id=rem.id,
                     status="sent" if success else "error",
@@ -56,7 +57,7 @@ async def process_reminders():
                 )
                 db.add(history)
                 
-                # Логируем событие
+                # Формируем аудит-лог
                 audit = AuditLog(
                     user_id=user.id,
                     action="reminder_sent",
@@ -70,13 +71,13 @@ async def process_reminders():
                 rem.current_count += 1
                 rem.last_sent_date = now
                 
-                # Вычисляем следующую дату на основе частоты
+                # Рассчитываем следующий день и дату
                 if rem.frequency == "daily":
-                    rem.next_reminder_date = now + relativedelta(days=1)
+                    rem.next_reminder_date = now + timedelta(days=1)
                 elif rem.frequency == "weekly":
-                    rem.next_reminder_date = now + relativedelta(weeks=1)
+                    rem.next_reminder_date = now + timedelta(weeks=1)
                 elif rem.frequency == "monthly":
-                    rem.next_reminder_date = now + relativedelta(months=1)
+                    rem.next_reminder_date = now + timedelta(months=1)
                 elif rem.frequency == "once":
                     rem.is_completed = True
                 
@@ -93,6 +94,7 @@ async def process_reminders():
         logger.error(f"Ошибка в планировщике уведомлений: {e}")
     finally:
         db.close()
+
 
 def setup_scheduler():
     scheduler.add_job(process_reminders, trigger=IntervalTrigger(minutes=5), id="reminders")

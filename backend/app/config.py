@@ -1,13 +1,14 @@
 """
 Конфигурация приложения
 """
-from pydantic_settings import BaseSettings, SettingsConfigDict, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
 from functools import lru_cache
-from typing import List
+from typing import List, ClassVar
 
 
 class Settings(BaseSettings):
-    """Настройки приложения из переменных окружения"""
+    """Настройки для инициализации приложения"""
     
     # База данных
     DATABASE_URL: str
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     # Для генерации ключа: python -c "import secrets; print(secrets.token_hex(32))"
 
-    KNOWN_WEAK_KEYS = (
+    KNOWN_WEAK_KEYS: ClassVar[tuple] = (
         "secret",
         "change-me",
         "super-secret-key-change-in-production",
@@ -47,8 +48,8 @@ class Settings(BaseSettings):
     def secret_key_strong(cls, v: str) -> str:
         if len(v) < 32:
             raise ValueError("SECRET_KEY слишком короткий!")
-        if v in KNOWN_WEAK_KEYS:
-            raise ValueError("SECRET_KEY содержит дефолтное значение!")
+        if v in cls.KNOWN_WEAK_KEYS:
+            raise ValueError("SECRET_KEY является нежёстким значением!")
         return v
     
     ALGORITHM: str = "HS256"
@@ -70,7 +71,6 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
     
     # Приложение
-    DEBUG: bool = False
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     
     @property
@@ -86,5 +86,5 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Получить настройки (кэшированные)"""
+    """Получить настройки (кэшированный синглтон)"""
     return Settings()

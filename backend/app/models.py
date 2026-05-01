@@ -40,13 +40,12 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
     tbank_token_encrypted = Column(String(500))
+    tbank_token_salt = Column(String(32))
     email_notifications = Column(Boolean, default=True)
     notification_email = Column(String(255))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
     last_login = Column(TIMESTAMP(timezone=True))
-    tbank_token_encrypted = Column(String(500))
-    tbank_token_salt = Column(String(32))
 
     # Relationships
     transactions = relationship("Transaction", back_populates="user", cascade="all, delete-orphan")
@@ -65,6 +64,7 @@ class Category(Base):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     code = Column(String(50), nullable=False)
     name = Column(String(100), nullable=False)
     name_en = Column(String(100))

@@ -12,7 +12,6 @@ from app.models import Transaction, Category, User
 from app.routers.auth import get_current_user
 from app.ml.model_loader import registry
 import logging
-from app.ml.model_loader import registry
 from app.ml.categorizer import categorize
 
 logger = logging.getLogger(__name__)

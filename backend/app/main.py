@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
-from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -38,7 +37,6 @@ def is_allowed_origin(origin: str) -> bool:
     for pattern in allowed:
         if origin == pattern:
             return True
-        # Поддержка wildcard поддоменов
         if pattern.startswith("*."):
             domain = pattern[2:]
             if origin.endswith(domain):
@@ -48,20 +46,11 @@ def is_allowed_origin(origin: str) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Запуск Finance App Backend...")
-    
-    # 1. Миграции БД
     Base.metadata.create_all(bind=engine)
-    
-    # 2. Загрузка ML-модулей
     registry.load_all()
-    
-    # 3. Запуск планировщика
     setup_scheduler()
-    
     logger.info("✅ Приложение инициализировано!")
     yield
-    
-    # Shutdown
     scheduler.shutdown(wait=False)
     logger.info("Приложение остановлено.")
 
@@ -71,7 +60,7 @@ app = FastAPI(
     description="API для управления личными финансами",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs" if settings.DEBUG else None,
+    docs_url="/docs" if settings.DEBUG else None,  # теперь settings доступна
     redoc_url="/redoc" if settings.DEBUG else None,
     openapi_url="/openapi.json" if settings.DEBUG else None,
 )

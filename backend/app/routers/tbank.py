@@ -12,18 +12,23 @@ from typing import Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
-import base64, hashlib
+import base64
 import httpx
 import os
 import logging
 import re
+
 logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import User, Transaction, Category, TransactionSource
 from app.routers.auth import get_current_user
+from app.config import get_settings
 
 router = APIRouter(prefix="/tbank", tags=["tbank"])
+
+limiter = Limiter(key_func=get_remote_address)
+
 
 def derive_fernet_key(secret_key: str, salt: bytes | None = None) -> tuple[bytes, bytes]:
     """Деривация ключа через PBKDF2 с salt"""
@@ -38,12 +43,21 @@ def derive_fernet_key(secret_key: str, salt: bytes | None = None) -> tuple[bytes
     key = base64.urlsafe_b64encode(kdf.derive(secret_key.encode()))
     return key, salt
 
+
+def _decrypt_token(encrypted: str, salt_b64: str | None, secret_key: str) -> str:
+    """Расшифровка токена через PBKDF2 (используется везде)"""
+    salt = base64.urlsafe_b64decode(salt_b64.encode()) if salt_b64 else None
+    key, _ = derive_fernet_key(secret_key, salt)
+    f = Fernet(key)
+    return f.decrypt(encrypted.encode()).decode()
+
+
 class TBankConnectRequest(BaseModel):
     token: str = Field(
         ..., 
         min_length=3, 
         max_length=200,
-        description="T-Bank API токен"
+        description="Т-Банк API токен"
     )
     
     @field_validator("token")
@@ -53,9 +67,10 @@ class TBankConnectRequest(BaseModel):
         if not v.startswith("t."):
             raise ValueError("Токен должен начинаться с 't.'")
         # Проверка: только допустимые символы
-        if not re.match(r'^t.[a-zA-Z0-9_-]+$', v):
+        if not re.match(r'^t\.[a-zA-Z0-9_-]+$', v):
             raise ValueError("Токен содержит недопустимые символы")
         return v
+
 
 class TBankStatusResponse(BaseModel):
     connected: bool
@@ -64,11 +79,15 @@ class TBankStatusResponse(BaseModel):
     message: str
 
 
+# ========================================================
+# GET /status — проверка статуса подключения
+# ========================================================
 @router.get("/status", response_model=TBankStatusResponse)
 async def get_tbank_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """Проверка текущего подключения Т-Банка"""
     if not current_user.tbank_token_encrypted:
         return {
             "connected": False,
@@ -77,13 +96,14 @@ async def get_tbank_status(
             "message": "Т-Банк не подключён"
         }
     
+    _s = get_settings()
+    
     try:
-        _s = get_settings()
-        key = base64.urlsafe_b64encode(
-            hashlib.sha256(_s.SECRET_KEY.encode()).digest()
+        token = _decrypt_token(
+            current_user.tbank_token_encrypted,
+            current_user.tbank_token_salt,
+            _s.SECRET_KEY
         )
-        f = Fernet(key)
-        token = f.decrypt(current_user.tbank_token_encrypted.encode()).decode()
         
         headers = {
             "Authorization": f"Bearer {token}",
@@ -91,7 +111,7 @@ async def get_tbank_status(
         }
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f"{_s.TBANK_API_URL}/...",
+                f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
                 headers=headers,
                 json={},
                 timeout=10
@@ -109,34 +129,42 @@ async def get_tbank_status(
                         "message": "Т-Банк подключён"
                     }
     except Exception as e:
-        logger.error(f"T-Bank status check failed: {e}")
+        logger.error(f"Т-Bank status check failed: {e}")
     
     return {
         "connected": False,
         "account_id": None, 
         "balance": None,
-        "message": "Ошибка проверки статуса"
+        "message": "Ошибка проверки подключения"
     }
 
 
+# ========================================================
+# POST /connect — подключение Т-Банка
+# ========================================================
 @router.post("/connect", response_model=TBankStatusResponse)
 async def connect_tbank(
     data: TBankConnectRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Подключить Т-Банк"""
+    """Подключение Т-Банка"""
     if not data.token or not data.token.startswith("t."):
-        raise HTTPException(status_code=400, detail="Неверный формат токена. Токен должен начинаться с 't.'")
+        raise HTTPException(
+            status_code=400, 
+            detail="Некорректный формат токена. Токен должен начинаться с 't.'"
+        )
     
     _s = get_settings()
-    key = base64.urlsafe_b64encode(
-        hashlib.sha256(_s.SECRET_KEY.encode()).digest()
-    )
+    
+    # Используем PBKDF2 вместо SHA256!
+    key, salt = derive_fernet_key(_s.SECRET_KEY)
     f = Fernet(key)
     encrypted = f.encrypt(data.token.encode()).decode()
+    salt_str = base64.urlsafe_b64encode(salt).decode()
 
     current_user.tbank_token_encrypted = encrypted
+    current_user.tbank_token_salt = salt_str  # Сохраняем salt!
     current_user.updated_at = datetime.utcnow()
     db.commit()
     
@@ -148,72 +176,81 @@ async def connect_tbank(
     }
 
 
+# ========================================================
+# POST /disconnect — отключение Т-Банка
+# ========================================================
 @router.post("/disconnect")
 async def disconnect_tbank(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Отключить Т-Банк"""
+    """Отключение Т-Банка"""
     current_user.tbank_token_encrypted = None
+    current_user.tbank_token_salt = None
     current_user.updated_at = datetime.utcnow()
     db.commit()
     
     return {"message": "Т-Банк отключён"}
 
 
+# ========================================================
+# POST /sync — синхронизация транзакций
+# ========================================================
 @router.post("/sync")
 @limiter.limit("5/minute")
 async def sync_tbank(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Синхронизировать транзакции с Т-Банком (через Sandbox API)"""
+    """Синхронизация транзакций с Т-Банком (через Sandbox API)"""
     if not current_user.tbank_token_encrypted:
         raise HTTPException(
             status_code=400, 
-            detail="Т-Банк не подключен. Сначала подключите аккаунт в настройках."
+            detail="Т-Банк не подключён. Сначала подключитесь в настройках."
         )
     
-    # 1. Расшифровка токена
+    # 1. Расшифровка токена через PBKDF2
+    _s = get_settings()
     try:
-        _s = get_settings()
-        # Генерируем ключ на основе SECRET_KEY
-        key = base64.urlsafe_b64encode(hashlib.sha256(_s.SECRET_KEY.encode()).digest())
-        f = Fernet(key)
-        # Расшифровываем
-        token = f.decrypt(current_user.tbank_token_encrypted.encode()).decode()
+        token = _decrypt_token(
+            current_user.tbank_token_encrypted,
+            current_user.tbank_token_salt,
+            _s.SECRET_KEY
+        )
     except Exception as e:
         logger.error(f"Decryption error: {e}")
-        raise HTTPException(status_code=500, detail="Ошибка безопасности при чтении токена")
+        raise HTTPException(
+            status_code=500, 
+            detail="Ошибка при расшифровке токена"
+        )
 
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
 
-    # 2. Асинхронное взаимодействие с API через httpx
+    # 2. Запрашиваем операции по API
     async with httpx.AsyncClient() as client:
         try:
-            # Шаг A: Получаем список аккаунтов
+            # Шаг А: Проверяем наличие аккаунтов
             accounts_response = await client.post(
-                "https://sandbox-invest-public-api.tinkoff.ru/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
+                f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
                 headers=headers,
                 json={},
                 timeout=10
             )
             
             if accounts_response.status_code != 200:
-                # Если токен невалиден для API, откатываемся на демо-данные
                 logger.warning(f"T-Bank API rejected token: {accounts_response.status_code}")
                 return await _add_demo_transactions(db, current_user)
             
             accounts_data = accounts_response.json()
             accounts = accounts_data.get("accounts", [])
             
-            # Шаг B: Если аккаунтов нет, создаем новый в песочнице
+            # Шаг Б: Если аккаунтов нет, создаём
             if not accounts:
                 create_response = await client.post(
-                    "https://sandbox-invest-public-api.tinkoff.ru/rest/tinkoff.public.invest.api.contract.v1.SandboxService/OpenSandboxAccount",
+                    f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/OpenSandboxAccount",
                     headers=headers,
                     json={},
                     timeout=10
@@ -223,20 +260,18 @@ async def sync_tbank(
                 else:
                     return await _add_demo_transactions(db, current_user)
             else:
-                account_id = accounts[0].get("id")
+                account_id = accounts[0].get("accountId")
             
-            # Шаг C: Получаем операции за последнюю неделю
+            # Шаг В: Получаем операции
             now = datetime.utcnow()
-            week_ago = now - timedelta(days=7)
-            
+            from_date = now - timedelta(days=30)
             operations_response = await client.post(
-                "https://sandbox-invest-public-api.tinkoff.ru/rest/tinkoff.public.invest.api.contract.v1.OperationsService/GetOperations",
+                f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxOperations",
                 headers=headers,
                 json={
                     "accountId": account_id,
-                    "from": week_ago.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "to": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "state": "OPERATION_STATE_EXECUTED"
+                    "from": from_date.isoformat(),
+                    "to": now.isoformat(),
                 },
                 timeout=10
             )
@@ -244,92 +279,129 @@ async def sync_tbank(
             if operations_response.status_code != 200:
                 return await _add_demo_transactions(db, current_user)
             
-            # Шаг D: Обработка полученных данных
-            operations_data = operations_response.json()
-            operations = operations_data.get("operations", [])
+            operations = operations_response.json().get("operations", [])
             
-            if not operations:
-                return await _add_demo_transactions(db, current_user)
-            
-            # Сохраняем операции в базу
-            new_count = 0
+            # Шаг Г: Сохраняем транзакции
+            added_count = 0
             for op in operations:
-                # Проверяем, нет ли уже такой транзакции
-                external_id = op.get("id")
-                exists = db.query(Transaction).filter(Transaction.external_id == external_id).first()
-                if exists:
+                ext_id = op.get("id", "")
+                # Проверяем дубли
+                existing = db.query(Transaction).filter(
+                    Transaction.external_id == ext_id,
+                    Transaction.user_id == current_user.id
+                ).first()
+                if existing:
                     continue
                 
-                # Создаем новую транзакцию
-                amount_data = op.get("payment", {})
-                # В API Т-Банка суммы часто в объектах {units, nano}
-                units = int(amount_data.get("units", 0))
-                nano = int(amount_data.get("nano", 0))
-                amount = Decimal(units) + Decimal(nano) / Decimal(10**9)
+                # Категория по MCC
+                mcc = str(op.get("mcc", ""))
+                cat = _find_category_by_mcc(db, mcc, current_user.id)
                 
-                # Т-Банк Инвестиции обычно возвращают отрицательные суммы для покупок
-                # Для нашего приложения приводим к абсолютному значению или логике доход/расход
-                is_expense = amount < 0
+                amount = float(op.get("payment", {}).get("amount", 0))
                 
-                new_tx = Transaction(
+                tx = Transaction(
                     user_id=current_user.id,
-                    amount=abs(amount),
-                    currency=amount_data.get("currency", "RUB").upper(),
-                    description=op.get("typeDescription", "Операция Т-Банк"),
+                    category_id=cat.id if cat else None,
+                    amount=amount,
+                    currency=op.get("payment", {}).get("currency", "RUB"),
+                    description=op.get("description", ""),
                     source=TransactionSource.tbank_api,
-                    external_id=external_id,
-                    merchant_name=op.get("figi", "Инвестиционный актив"),
-                    transaction_date=datetime.strptime(op.get("date")[:19], "%Y-%m-%dT%H:%M:%S"),
-                    category_manual=False
+                    external_id=ext_id,
+                    merchant_name=op.get("merchant", {}).get("name", ""),
+                    merchant_category_code=mcc,
+                    transaction_date=datetime.fromisoformat(op.get("date", now.isoformat()).replace("Z", "+00:00")),
                 )
-                db.add(new_tx)
-                new_count += 1
+                db.add(tx)
+                added_count += 1
             
             db.commit()
-            return {
-                "status": "success", 
-                "message": f"Синхронизация завершена. Добавлено {new_count} новых транзакций.",
-                "count": new_count
-            }
-
+            return {"message": f"Синхронизация завершена. Добавлено: {added_count}", "added": added_count}
+            
+        except httpx.TimeoutException:
+            logger.error("T-Bank API timeout")
+            return await _add_demo_transactions(db, current_user)
         except Exception as e:
-            logger.error(f"Error during T-Bank sync: {str(e)}")
-            # В любой непонятной ситуации — добавляем демо-данные, чтобы интерфейс не был пустым
+            logger.error(f"T-Bank sync error: {e}")
             return await _add_demo_transactions(db, current_user)
 
+
+# ========================================================
+# Вспомогательные функции
+# ========================================================
+
+# Маппинг MCC → категория
+MCC_CATEGORY_MAP = {
+    "5411": "food", "5422": "food", "5441": "food", "5451": "food",
+    "5462": "food", "5912": "food",
+    "5812": "restaurants", "5813": "restaurants", "5814": "restaurants",
+    "4111": "transport", "4121": "transport", "4131": "transport",
+    "4784": "transport", "5542": "transport",
+    "6011": "housing", "6051": "housing",
+    "5912": "health", "5921": "health", "5970": "health",
+    "5200": "shopping", "5300": "shopping", "5600": "shopping",
+    "5651": "shopping", "5691": "shopping", "5712": "shopping",
+    "5815": "entertainment", "5816": "entertainment", "5977": "entertainment",
+    "7032": "entertainment", "7033": "entertainment",
+    "8211": "education", "8241": "education", "8299": "education",
+}
+
+
+def _find_category_by_mcc(db: Session, mcc: str, user_id: int):
+    """Поиск категории по MCC-коду"""
+    category_code = MCC_CATEGORY_MAP.get(mcc)
+    if not category_code:
+        return None
+    return db.query(Category).filter(
+        Category.code == category_code,
+        Category.user_id == user_id
+    ).first()
+
+
+DEMO_TRANSACTIONS = [
+    {"desc": "Перекус в кафе", "amount": -450.00, "cat": "restaurants", "mcc": "5812"},
+    {"desc": "Яндекс Про", "amount": -320.00, "cat": "transport", "mcc": "4121"},
+    {"desc": "Пятёрочка", "amount": -2380.50, "cat": "food", "mcc": "5411"},
+    {"desc": "Зарплата", "amount": 85000.00, "cat": "salary", "mcc": ""},
+    {"desc": "Ozon", "amount": -1750.00, "cat": "shopping", "mcc": "5200"},
+    {"desc": "Аптека", "amount": -890.00, "cat": "health", "mcc": "5912"},
+    {"desc": "Netflix", "amount": -799.00, "cat": "entertainment", "mcc": "5815"},
+    {"desc": "ЖКХ", "amount": -5400.00, "cat": "housing", "mcc": "6011"},
+]
+
+
 async def _add_demo_transactions(db: Session, user: User):
-    """Добавить демо-транзакции"""    
-    # Получаем категории
-    food = db.query(Category).filter(Category.code == "food").first()
-    transport = db.query(Category).filter(Category.code == "transport").first()
-    other = db.query(Category).filter(Category.code == "other").first()
+    """Fallback: демо-транзакции если API недоступен"""
+    # Проверяем, были ли уже добавлены демо-транзакции
+    existing_demo = db.query(Transaction).filter(
+        Transaction.user_id == user.id,
+        Transaction.source == TransactionSource.tbank_api,
+        Transaction.description.in_([d["desc"] for d in DEMO_TRANSACTIONS])
+    ).first()
     
-    now = datetime.utcnow()
-    
-    demo_transactions = [
-        {"amount": Decimal("50000"), "description": "Пополнение счёта", "category_id": None, "days_ago": 0},
-        {"amount": Decimal("-1500"), "description": "Покупка акций SBER", "category_id": other.id if other else None, "days_ago": 0},
-    ]
+    if existing_demo:
+        return {"message": "Демо-данные уже загружены", "added": 0, "demo": True}
     
     added = 0
-    for t_data in demo_transactions:
-        t = Transaction(
+    for dt in DEMO_TRANSACTIONS:
+        cat = db.query(Category).filter(
+            Category.code == dt["cat"],
+            Category.user_id == user.id
+        ).first()
+        
+        tx = Transaction(
             user_id=user.id,
-            amount=t_data["amount"],
-            description=t_data["description"],
-            category_id=t_data["category_id"],
+            category_id=cat.id if cat else None,
+            amount=dt["amount"],
             currency="RUB",
+            description=dt["desc"],
             source=TransactionSource.tbank_api,
-            external_id=f"demo_{user.id}_{added}_{now.timestamp()}",
-            transaction_date=now - timedelta(days=t_data["days_ago"]),
+            external_id=f"demo-{dt['cat']}-{added}",
+            merchant_name=dt["desc"],
+            merchant_category_code=dt["mcc"],
+            transaction_date=datetime.utcnow(),
         )
-        db.add(t)
+        db.add(tx)
         added += 1
     
     db.commit()
-    
-    return {
-        "success": True,
-        "message": f"Добавлено {added} демо-транзакций (Sandbox API недоступен или пуст)",
-        "transactions_added": added,
-    }
+    return {"message": f"⚠️ API недоступен. Загружены демо-данные ({added} операций)", "added": added, "demo": True}

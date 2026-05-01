@@ -31,6 +31,17 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       DEBUG: ${DEBUG:-false}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      TBANK_API_URL: https://business.tbank.ru/openapi
+      TBANK_TOKEN: ${TBANK_TOKEN:-}
+      CURRENCY_API_URL: https://api.exchangerate-api.com/v4/latest
+      CURRENCY_API_KEY: ${CURRENCY_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
     ports:
       - "8000:8000"
     command: >
