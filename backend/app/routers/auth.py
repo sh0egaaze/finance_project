@@ -115,13 +115,11 @@ async def get_current_user(
     
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        try:
-            user_id_int = int(user_id)
-        except (ValueError, TypeError):
-            raise credentials_exception
+        user_id: str = payload.get("sub") 
         if user_id is None:
             raise credentials_exception
-    except JWTError:
+        user_id_int = int(user_id)
+    except (JWTError, ValueError):
         raise credentials_exception
     
     user = db.query(User).filter(User.id == user_id_int).first()
@@ -133,6 +131,7 @@ async def get_current_user(
 
 # ===== Эндпоинты =====
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/hour")
 async def register(data: UserCreate, db: Session = Depends(get_db)):
     """Регистрация нового пользователя"""
     existing = db.query(User).filter(User.email == data.email).first()
