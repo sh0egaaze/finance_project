@@ -19,8 +19,15 @@ async def smart_input(data: dict, db: Session = Depends(get_db), user: User = De
     # 2. Определяем категорию (Нейросеть #1)
     cat_pred = registry.categorizer.predict(parsed["description"])
     
-    db_cat = db.query(Category).filter(Category.code == cat_pred["category_code"]).first()
+    db_cat = db.query(Category).filter(
+        Category.code == cat_pred["category_code"],
+        Category.user_id == user.id
+    ).first()    
     
+    category_id = db_cat.id if db_cat else None
+    if not category_id:
+        logger.warning(f"Category code {cat_pred['category_code']} not found in DB")
+
     return {
         "amount": parsed["amount"],
         "description": parsed["description"],

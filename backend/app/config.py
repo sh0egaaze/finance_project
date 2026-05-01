@@ -37,11 +37,11 @@ class Settings(BaseSettings):
     
     # Т-Банк API
     TBANK_API_URL: str = "https://business.tbank.ru/openapi"
-    TBANK_TOKEN: str = ""
+    TBANK_TOKEN: str = Field(..., env="TBANK_TOKEN")
     
     # Курсы валют API
     CURRENCY_API_URL: str = "https://api.exchangerate-api.com/v4/latest"
-    CURRENCY_API_KEY: str = ""
+    CURRENCY_API_KEY: str = Field(..., env="CURRENCY_API_KEY")
     
     # Email (SMTP)
     SMTP_HOST: str = "smtp.gmail.com"

@@ -82,7 +82,7 @@ class Category(Base):
     predictions = relationship("Prediction", back_populates="category")
 
     __table_args__ = (
-        Index('ix_categories_code', 'code', unique=True),
+        Index('ix_categories_user_code', 'user_id', 'code', unique=True),
         Index('ix_categories_id', 'id'),
     )
 
