@@ -136,7 +136,11 @@ async def register(data: UserCreate, db: Session = Depends(get_db)):
     """Регистрация нового пользователя"""
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Email уже зарегистрирован")
+        raise HTTPException(
+            status_code=400, 
+            detail="Регистрация невозможна. "
+                   "Если у вас уже есть аккаунт, войдите."
+        )
     
     user = User(
         email=data.email,

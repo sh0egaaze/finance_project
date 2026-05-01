@@ -1,15 +1,23 @@
 """
 Роутер для интеграции с Т-Банком
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
 import base64, hashlib
+import httpx
 import os
+import logging
+import re
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import User, Transaction, Category, TransactionSource
@@ -17,10 +25,37 @@ from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/tbank", tags=["tbank"])
 
+def derive_fernet_key(secret_key: str, salt: bytes | None = None) -> tuple[bytes, bytes]:
+    """Деривация ключа через PBKDF2 с salt"""
+    if salt is None:
+        salt = os.urandom(16)
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=600_000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(secret_key.encode()))
+    return key, salt
 
 class TBankConnectRequest(BaseModel):
-    token: str
-
+    token: str = Field(
+        ..., 
+        min_length=3, 
+        max_length=200,
+        description="T-Bank API токен"
+    )
+    
+    @field_validator("token")
+    @classmethod
+    def validate_token(cls, v: str) -> str:
+        v = v.strip()
+        if not v.startswith("t."):
+            raise ValueError("Токен должен начинаться с 't.'")
+        # Проверка: только допустимые символы
+        if not re.match(r'^t.[a-zA-Z0-9_-]+$', v):
+            raise ValueError("Токен содержит недопустимые символы")
+        return v
 
 class TBankStatusResponse(BaseModel):
     connected: bool
@@ -34,20 +69,53 @@ async def get_tbank_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Проверить статус подключения Т-Банка"""
-    if current_user.tbank_token_encrypted:
+    if not current_user.tbank_token_encrypted:
         return {
-            "connected": True,
-            "account_id": "sandbox-account",
+            "connected": False,
+            "account_id": None,
             "balance": None,
-            "message": "Т-Банк подключён"
+            "message": "Т-Банк не подключён"
         }
+    
+    try:
+        _s = get_settings()
+        key = base64.urlsafe_b64encode(
+            hashlib.sha256(_s.SECRET_KEY.encode()).digest()
+        )
+        f = Fernet(key)
+        token = f.decrypt(current_user.tbank_token_encrypted.encode()).decode()
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{_s.TBANK_API_URL}/...",
+                headers=headers,
+                json={},
+                timeout=10
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                accounts = data.get("accounts", [])
+                if accounts:
+                    balance = accounts[0].get("balance", {}).get("value")
+                    account_id = accounts[0].get("accountId")
+                    return {
+                        "connected": True,
+                        "account_id": account_id,
+                        "balance": balance,
+                        "message": "Т-Банк подключён"
+                    }
+    except Exception as e:
+        logger.error(f"T-Bank status check failed: {e}")
     
     return {
         "connected": False,
-        "account_id": None,
+        "account_id": None, 
         "balance": None,
-        "message": "Т-Банк не подключён"
+        "message": "Ошибка проверки статуса"
     }
 
 
@@ -94,6 +162,7 @@ async def disconnect_tbank(
 
 
 @router.post("/sync")
+@limiter.limit("5/minute")
 async def sync_tbank(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -123,7 +192,6 @@ async def sync_tbank(
     }
 
     # 2. Асинхронное взаимодействие с API через httpx
-    import httpx
     async with httpx.AsyncClient() as client:
         try:
             # Шаг A: Получаем список аккаунтов
@@ -158,7 +226,6 @@ async def sync_tbank(
                 account_id = accounts[0].get("id")
             
             # Шаг C: Получаем операции за последнюю неделю
-            from datetime import timedelta
             now = datetime.utcnow()
             week_ago = now - timedelta(days=7)
             
@@ -231,9 +298,7 @@ async def sync_tbank(
             return await _add_demo_transactions(db, current_user)
 
 async def _add_demo_transactions(db: Session, user: User):
-    """Добавить демо-транзакции"""
-    from datetime import timedelta
-    
+    """Добавить демо-транзакции"""    
     # Получаем категории
     food = db.query(Category).filter(Category.code == "food").first()
     transport = db.query(Category).filter(Category.code == "transport").first()

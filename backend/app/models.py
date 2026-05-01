@@ -45,6 +45,8 @@ class User(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
     last_login = Column(TIMESTAMP(timezone=True))
+    tbank_token_encrypted = Column(String(500))
+    tbank_token_salt = Column(String(32))
 
     # Relationships
     transactions = relationship("Transaction", back_populates="user", cascade="all, delete-orphan")

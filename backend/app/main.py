@@ -10,6 +10,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from loguru import logger
+from app.scheduler import scheduler, setup_scheduler
+from starlette.middleware.cors import CORSMiddleware
+import re
 
 from app.database import engine, Base
 from app.models import (
@@ -30,20 +33,37 @@ from app.routers import (
 
 from app.ml.model_loader import registry
 
+def is_allowed_origin(origin: str) -> bool:
+    allowed = settings.allowed_origins_list
+    for pattern in allowed:
+        if origin == pattern:
+            return True
+        # Поддержка wildcard поддоменов
+        if pattern.startswith("*."):
+            domain = pattern[2:]
+            if origin.endswith(domain):
+                return True
+    return False
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Управление жизненным циклом приложения"""
     logger.info("Запуск Finance App Backend...")
     
-    # 1. Создание таблиц
+    # 1. Миграции БД
     Base.metadata.create_all(bind=engine)
     
-    # 2. Загрузка ML-моделей
+    # 2. Загрузка ML-модулей
     registry.load_all()
+    
+    # 3. Запуск планировщика
+    setup_scheduler()
     
     logger.info("✅ Приложение инициализировано!")
     yield
-    logger.info("Остановка Finance App Backend...")
+    
+    # Shutdown
+    scheduler.shutdown(wait=False)
+    logger.info("Приложение остановлено.")
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
@@ -95,3 +115,13 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
         status_code=500,
         content={"detail": "Ошибка базы данных. Повторите позже."}
     )
+
+@app.get("/ml-status")
+async def ml_status():
+    """Статус ML-моделей"""
+    return {
+        "models": {
+            name: {"loaded": loaded}
+            for name, loaded in registry._loaded.items()
+        }
+    }

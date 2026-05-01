@@ -81,12 +81,17 @@ class FinanceRecommender:
         
         recs = self.recommendations_map.get(profile_name, []).copy()
         
-        # Твои эвристики
         if features.get("expense_to_income_ratio", 0) > 0.9:
+            overspend = features.get("expense_to_income_ratio", 0) * 100
+            total_expenses = features.get("total_expenses", 0)
+            suggested_savings = round(total_expenses * 0.2, 2) if total_expenses > 0 else 0
+            
             recs.append({
-                "title": "⚠️ Критический уровень расходов",
-                "description": f"Вы тратите {features['expense_to_income_ratio']*100:.0f}% дохода. Рекомендуется снизить планку до 80%.",
-                "potential_savings": 1000
+                "title": "⚠️ Критическая финансовая нагрузка",
+                "description": f"Вы тратите {overspend:.0f}% дохода. "
+                            f"Рекомендуется снизить расходы до 80%. "
+                            f"Потенциальная экономия: {suggested_savings:.0f}₽/мес.",
+                "potential_savings": suggested_savings,
             })
             
         return recs

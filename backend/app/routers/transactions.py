@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, condecimal, Field
@@ -9,29 +11,49 @@ from app.database import get_db
 from app.models import Transaction, Category, User
 from app.routers.auth import get_current_user
 from app.ml.model_loader import registry
+import logging
+from app.ml.model_loader import registry
+from app.ml.categorizer import categorize
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
-@router.post("/smart-input")
-async def smart_input(data: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    # 1. Парсим текст (Нейросеть #2)
-    parsed = registry.nlp_parser.parse(data.get("text", ""))
-    # 2. Определяем категорию (Нейросеть #1)
-    cat_pred = registry.categorizer.predict(parsed["description"])
-    
-    db_cat = db.query(Category).filter(
-        Category.code == cat_pred["category_code"],
-        Category.user_id == user.id
-    ).first()    
-    
-    category_id = db_cat.id if db_cat else None
-    if not category_id:
-        logger.warning(f"Category code {cat_pred['category_code']} not found in DB")
+limiter = Limiter(key_func=get_remote_address)
 
+@router.post("/smart-input")
+@limiter.limit("30/minute")
+async def smart_input(
+    data: SmartInputRequest,
+    db: Session = Depends(get_db), 
+    user: User = Depends(get_current_user)
+):
+    # Получаем ML-модели через .get() с проверкой
+    nlp_parser = registry.get("nlp_parser")
+    categorizer = registry.get("categorizer")
+    
+    if not nlp_parser:
+        raise HTTPException(status_code=503, detail="NLP-парсер не загружен")
+    
+    # 1. Парсинг текста
+    parsed = registry.get("nlp_parser").parse(data.text)   
+     
+    # 2. Категоризация (если модель загружена)
+    category_id = None
+    if categorizer and parsed.get("description"):
+        cat_pred = categorize(parsed["description"])
+        db_cat = db.query(Category).filter(
+            Category.code == cat_pred.category_code,
+            Category.user_id == user.id
+        ).first()
+        category_id = db_cat.id if db_cat else None
+        if not category_id:
+            logger.warning(f"Category code {cat_pred.category_code} not found in DB")
+    
     return {
         "amount": parsed["amount"],
         "description": parsed["description"],
-        "category_id": db_cat.id if db_cat else None,
+        "category_id": category_id,
         "is_income": parsed["is_income"]
     }
 
@@ -75,6 +97,17 @@ def get_own_transaction(
             detail="Транзакция не найдена или у вас нет доступа",
         )
     return tx
+
+class SmartInputRequest(BaseModel):
+    text: str = Field(
+        ..., 
+        min_length=1, 
+        max_length=1000,
+        description="Текст для парсинга транзакции"
+    )
+    
+    class Config:
+        from_attributes = True
 
 @router.put("/{tx_id}")
 async def update_transaction(

@@ -3,6 +3,8 @@ import torch
 import numpy as np
 import pickle
 import joblib
+from dataclasses import dataclass
+from typing import Optional
 from .model_definition import TransactionAutoencoder
 
 class AnomalyDetector:
@@ -97,3 +99,27 @@ def detect_anomaly(tx: dict) -> dict:
     if not det: 
         return {"is_suspicious": False, "error": "Detector not loaded"}
     return det.detect(tx)
+
+@dataclass
+class AnomalyResult:
+    is_suspicious: bool
+    anomaly_score: float = 0.0
+    reason: str = ""
+    details: dict = None
+    error: Optional[str] = None
+    
+    def __post_init__(self):
+        if self.details is None:
+            self.details = {}
+    
+    def to_dict(self) -> dict:
+        result = {"is_suspicious": self.is_suspicious}
+        if self.error:
+            result["error"] = self.error
+        else:
+            result.update({
+                "anomaly_score": self.anomaly_score,
+                "reason": self.reason,
+                "details": self.details,
+            })
+        return result

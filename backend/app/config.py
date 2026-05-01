@@ -20,8 +20,27 @@ class Settings(BaseSettings):
         "secret",
         "change-me",
         "super-secret-key-change-in-production",
+        "your-super-secret-key-change-in-production",
         "change-this-to-a-very-long-random-string-at-least-32-characters",
+        "your-secret-key",
+        "my-secret-key",
+        "secret-key",
+        "jwt-secret",
     )
+
+    DEBUG: bool = False
+    
+    @field_validator("DEBUG")
+    @classmethod
+    def warn_debug(cls, v: bool) -> bool:
+        if v:
+            import warnings
+            warnings.warn(
+                "⚠️ DEBUG=True! Не используйте в продакшене. "
+                "API-документация будет доступна публично.",
+                stacklevel=2
+            )
+        return v
 
     @field_validator("SECRET_KEY")
     @classmethod
