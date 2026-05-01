@@ -10,7 +10,7 @@ from .model_loader import registry
 
 __all__ = [
     "FinanceParser",
-    "categorize", 
+    "categorize",
     "categorize_batch",
     "CategoryPrediction",
     "FinanceRecommender",
