@@ -1,7 +1,7 @@
 """
 Роутер для курсов валют
 """
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List
 from fastapi import APIRouter, Depends
@@ -38,7 +38,7 @@ async def get_rates(db: Session = Depends(get_db)):
             {"base_currency": "RUB", "target_currency": "CNY", "rate": 0.079, "change": 0.3},
             {"base_currency": "RUB", "target_currency": "GBP", "rate": 0.009, "change": 0.1},
         ]
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return [
             CurrencyRateResponse(
                 base_currency=r["base_currency"],

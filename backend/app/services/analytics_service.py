@@ -2,7 +2,7 @@
 Сервис аналитики и прогнозирования
 """
 from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from collections import defaultdict
 from sqlalchemy.orm import Session
@@ -24,9 +24,9 @@ class AnalyticsService:
     ) -> List[Dict]:
         """Получить расходы по категориям"""
         if not date_from:
-            date_from = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0)
+            date_from = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0)
         if not date_to:
-            date_to = datetime.utcnow()
+            date_to = datetime.now(timezone.utc)
         
         # Группировка по категориям
         results = db.query(
@@ -75,7 +75,7 @@ class AnalyticsService:
     ) -> List[Dict]:
         """Получить статистику по месяцам"""
         stats = []
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         for i in range(months - 1, -1, -1):
             # Вычисляем начало и конец месяца
@@ -181,7 +181,7 @@ class AnalyticsService:
             "confidence": round(confidence, 2),
             "by_category": category_predictions,
             "recommendations": recommendations,
-            "prediction_date": datetime.utcnow().isoformat()
+            "prediction_date": datetime.now(timezone.utc).isoformat()
         }
     
     @staticmethod
@@ -250,7 +250,7 @@ class AnalyticsService:
         user_id: int
     ) -> Dict:
         """Получить статистику для дашборда"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
         # Доходы за месяц

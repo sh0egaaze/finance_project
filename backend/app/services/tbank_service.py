@@ -3,7 +3,7 @@
 Документация: https://tinkoff.github.io/investAPI/
 """
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import httpx
 from loguru import logger
@@ -125,8 +125,8 @@ class TBankService:
             account_id = account_info["account_id"]
             
             # Получаем операции
-            date_from = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-            date_to = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            date_from = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            date_to = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             
             async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.post(
@@ -205,7 +205,7 @@ class TBankService:
             try:
                 transaction_date = datetime.fromisoformat(op_date.replace("Z", "+00:00"))
             except:
-                transaction_date = datetime.utcnow()
+                transaction_date = datetime.now(timezone.utc)
             
             transaction = Transaction(
                 user_id=user_id,

@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, condecimal, Field
 from typing import Optional
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from app.database import get_db
 from app.models import Transaction, Category, User
 from app.routers.auth import get_current_user
@@ -185,7 +185,7 @@ async def create_transaction(
     user: User = Depends(get_current_user),
 ):
     """Создание новой транзакции"""
-    tx_date = datetime.utcnow()
+    tx_date = datetime.now(timezone.utc)
     if data.transaction_date:
         try:
             tx_date = datetime.fromisoformat(data.transaction_date)

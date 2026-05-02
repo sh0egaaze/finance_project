@@ -2,7 +2,7 @@
 Сервис для работы с курсами валют
 """
 from typing import List, Optional, Dict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
 import httpx
@@ -60,7 +60,7 @@ class CurrencyService:
             return []
         
         created_rates = []
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         for currency, rate in rates_data.items():
             currency_rate = CurrencyRate(
@@ -93,7 +93,7 @@ class CurrencyService:
             
             if latest:
                 # Получаем вчерашний курс для расчёта изменения
-                yesterday = datetime.utcnow() - timedelta(days=1)
+                yesterday = datetime.now(timezone.utc) - timedelta(days=1)
                 previous = db.query(CurrencyRate).filter(
                     and_(
                         CurrencyRate.base_currency == currency,
@@ -178,7 +178,7 @@ class CurrencyService:
             from_currency=from_currency,
             to_currency=to_currency,
             rate=rate,
-            rate_date=datetime.utcnow()
+            rate_date=datetime.now(timezone.utc)
         )
     
     @staticmethod
@@ -188,7 +188,7 @@ class CurrencyService:
         days: int = 30
     ) -> List[CurrencyRate]:
         """Получить историю курса валюты"""
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
         
         return db.query(CurrencyRate).filter(
             and_(

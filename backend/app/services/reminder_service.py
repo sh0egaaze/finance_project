@@ -2,7 +2,7 @@
 Сервис для работы с напоминаниями
 """
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from loguru import logger
@@ -74,7 +74,7 @@ class ReminderService:
         days_ahead: int = 7
     ) -> List[Reminder]:
         """Получить предстоящие напоминания"""
-        future_date = datetime.utcnow() + timedelta(days=days_ahead)
+        future_date = datetime.now(timezone.utc) + timedelta(days=days_ahead)
         
         return db.query(Reminder).filter(
             and_(
@@ -88,7 +88,7 @@ class ReminderService:
     @staticmethod
     def get_due_reminders(db: Session) -> List[Reminder]:
         """Получить напоминания, которые нужно отправить сейчас"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         return db.query(Reminder).filter(
             and_(
@@ -153,7 +153,7 @@ class ReminderService:
         Отметить напоминание как отправленное.
         Обновляет даты и счётчики.
         """
-        reminder.last_sent_date = datetime.utcnow()
+        reminder.last_sent_date = datetime.now(timezone.utc)
         reminder.current_count += 1
         
         # Если это одноразовое напоминание или достигнут лимит повторений

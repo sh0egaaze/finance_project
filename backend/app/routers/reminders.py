@@ -1,7 +1,7 @@
 """
 Роутер для напоминаний
 """
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -170,7 +170,7 @@ async def update_reminder(
     if data.is_active is not None:
         reminder.is_active = data.is_active
     
-    reminder.updated_at = datetime.utcnow()
+    reminder.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(reminder)
     

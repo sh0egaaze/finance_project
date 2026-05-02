@@ -1,7 +1,7 @@
 """
 Роутер для дашборда
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -32,7 +32,7 @@ async def get_dashboard(
     current_user: User = Depends(get_current_user)
 ):
     """Получить данные дашборда"""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     month_ago = now - timedelta(days=30)
     
     # Получаем транзакции за месяц
@@ -119,7 +119,7 @@ async def get_analytics(
     current_user: User = Depends(get_current_user)
 ):
     """Аналитика расходов"""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     month_ago = now - timedelta(days=30)
     
     transactions = db.query(Transaction).filter(

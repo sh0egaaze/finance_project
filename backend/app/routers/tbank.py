@@ -1,15 +1,15 @@
 """
 Роутер для интеграции с Т-Банком
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, Field
 from typing import Optional
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 import base64
@@ -66,7 +66,6 @@ class TBankConnectRequest(BaseModel):
         v = v.strip()
         if not v.startswith("t."):
             raise ValueError("Токен должен начинаться с 't.'")
-        # Проверка: только допустимые символы
         if not re.match(r'^t\.[a-zA-Z0-9_-]+$', v):
             raise ValueError("Токен содержит недопустимые символы")
         return v
@@ -98,13 +97,31 @@ async def get_tbank_status(
     
     _s = get_settings()
     
+    # ✅ Раздельные блоки try для разных типов ошибок
     try:
         token = _decrypt_token(
             current_user.tbank_token_encrypted,
             current_user.tbank_token_salt,
-            _s.SECRET_KEY
+            _s.TBANK_ENCRYPTION_KEY  # ← ОТДЕЛЬНЫЙ КЛЮЧ
         )
-        
+    except InvalidToken:
+        logger.error("Не удалось расшифровать токен — возможно, изменён ключ шифрования")
+        return {
+            "connected": False,
+            "account_id": None,
+            "balance": None,
+            "message": "Токен повреждён. Пожалуйста, переподключите Т-Банк."
+        }
+    except Exception as e:
+        logger.error(f"Ошибка расшифровки: {e}")
+        return {
+            "connected": False,
+            "account_id": None,
+            "balance": None,
+            "message": "Внутренняя ошибка. Обратитесь в поддержку."
+        }
+    
+    try:
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
@@ -116,6 +133,13 @@ async def get_tbank_status(
                 json={},
                 timeout=10
             )
+            if resp.status_code == 401:
+                return {
+                    "connected": False,
+                    "account_id": None,
+                    "balance": None,
+                    "message": "Токен Т-Банка истёк. Переподключите."
+                }
             if resp.status_code == 200:
                 data = resp.json()
                 accounts = data.get("accounts", [])
@@ -128,8 +152,22 @@ async def get_tbank_status(
                         "balance": balance,
                         "message": "Т-Банк подключён"
                     }
-    except Exception as e:
-        logger.error(f"Т-Bank status check failed: {e}")
+    except httpx.TimeoutException:
+        logger.warning("T-Bank API timeout в /status")
+        return {
+            "connected": False,
+            "account_id": None,
+            "balance": None,
+            "message": "T-Bank API временно недоступен"
+        }
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP ошибка: {e}")
+        return {
+            "connected": False,
+            "account_id": None,
+            "balance": None,
+            "message": "Ошибка связи с T-Bank"
+        }
     
     return {
         "connected": False,
@@ -143,7 +181,9 @@ async def get_tbank_status(
 # POST /connect — подключение Т-Банка
 # ========================================================
 @router.post("/connect", response_model=TBankStatusResponse)
+@limiter.limit("3/minute")  # ← RATE LIMITING!
 async def connect_tbank(
+    request: Request,  # ← Нужно для slowapi
     data: TBankConnectRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -157,15 +197,39 @@ async def connect_tbank(
     
     _s = get_settings()
     
-    # Используем PBKDF2 вместо SHA256!
-    key, salt = derive_fernet_key(_s.SECRET_KEY)
+    # ✅ СНАЧАЛА проверяем токен через T-Bank API
+    try:
+        headers = {
+            "Authorization": f"Bearer {data.token}",
+            "Content-Type": "application/json"
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
+                headers=headers,
+                json={},
+                timeout=10
+            )
+            if resp.status_code != 200:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Токен невалиден. T-Bank API вернул статус {resp.status_code}"
+                )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="T-Bank API недоступен. Попробуйте позже."
+        )
+    
+    # ✅ ТОЛЬКО после проверки — шифруем и сохраняем
+    key, salt = derive_fernet_key(_s.TBANK_ENCRYPTION_KEY)  # ← ОТДЕЛЬНЫЙ КЛЮЧ!
     f = Fernet(key)
     encrypted = f.encrypt(data.token.encode()).decode()
     salt_str = base64.urlsafe_b64encode(salt).decode()
 
     current_user.tbank_token_encrypted = encrypted
-    current_user.tbank_token_salt = salt_str  # Сохраняем salt!
-    current_user.updated_at = datetime.utcnow()
+    current_user.tbank_token_salt = salt_str
+    current_user.updated_at = datetime.now(timezone.utc)  # ← НЕ utcnow()!
     db.commit()
     
     return {
@@ -187,7 +251,7 @@ async def disconnect_tbank(
     """Отключение Т-Банка"""
     current_user.tbank_token_encrypted = None
     current_user.tbank_token_salt = None
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = datetime.now(timezone.utc)  # ← НЕ utcnow()!
     db.commit()
     
     return {"message": "Т-Банк отключён"}
@@ -199,6 +263,7 @@ async def disconnect_tbank(
 @router.post("/sync")
 @limiter.limit("5/minute")
 async def sync_tbank(
+    request: Request,  # ← Нужно для slowapi
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -209,13 +274,19 @@ async def sync_tbank(
             detail="Т-Банк не подключён. Сначала подключитесь в настройках."
         )
     
-    # 1. Расшифровка токена через PBKDF2
+    # 1. Расшифровка токена
     _s = get_settings()
     try:
         token = _decrypt_token(
             current_user.tbank_token_encrypted,
             current_user.tbank_token_salt,
-            _s.SECRET_KEY
+            _s.TBANK_ENCRYPTION_KEY  # ← ОТДЕЛЬНЫЙ КЛЮЧ!
+        )
+    except InvalidToken:
+        logger.error("Не удалось расшифровать токен — возможно, изменён ключ шифрования")
+        raise HTTPException(
+            status_code=500, 
+            detail="Токен повреждён. Пожалуйста, переподключите Т-Банк."
         )
     except Exception as e:
         logger.error(f"Decryption error: {e}")
@@ -263,7 +334,7 @@ async def sync_tbank(
                 account_id = accounts[0].get("accountId")
             
             # Шаг В: Получаем операции
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)  # ← НЕ utcnow()!
             from_date = now - timedelta(days=30)
             operations_response = await client.post(
                 f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxOperations",
@@ -285,7 +356,6 @@ async def sync_tbank(
             added_count = 0
             for op in operations:
                 ext_id = op.get("id", "")
-                # Проверяем дубли
                 existing = db.query(Transaction).filter(
                     Transaction.external_id == ext_id,
                     Transaction.user_id == current_user.id
@@ -293,7 +363,6 @@ async def sync_tbank(
                 if existing:
                     continue
                 
-                # Категория по MCC
                 mcc = str(op.get("mcc", ""))
                 cat = _find_category_by_mcc(db, mcc, current_user.id)
                 
@@ -329,7 +398,6 @@ async def sync_tbank(
 # Вспомогательные функции
 # ========================================================
 
-# Маппинг MCC → категория
 MCC_CATEGORY_MAP = {
     "5411": "food", "5422": "food", "5441": "food", "5451": "food",
     "5462": "food", "5912": "food",
@@ -371,7 +439,6 @@ DEMO_TRANSACTIONS = [
 
 async def _add_demo_transactions(db: Session, user: User):
     """Fallback: демо-транзакции если API недоступен"""
-    # Проверяем, были ли уже добавлены демо-транзакции
     existing_demo = db.query(Transaction).filter(
         Transaction.user_id == user.id,
         Transaction.source == TransactionSource.tbank_api,
@@ -398,7 +465,7 @@ async def _add_demo_transactions(db: Session, user: User):
             external_id=f"demo-{dt['cat']}-{added}",
             merchant_name=dt["desc"],
             merchant_category_code=dt["mcc"],
-            transaction_date=datetime.utcnow(),
+            transaction_date=datetime.now(timezone.utc),  # ← НЕ utcnow()!
         )
         db.add(tx)
         added += 1

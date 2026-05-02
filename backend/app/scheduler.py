@@ -4,7 +4,7 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 
 from .database import SessionLocal
@@ -22,7 +22,7 @@ async def process_reminders():
         logger.error(f"Не удалось подключиться к БД: {e}")
         return
     email_service = get_email_service()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     try:
         # Находим активные периодические уведомления, в том числе корректные настройки

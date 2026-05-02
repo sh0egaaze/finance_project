@@ -2,7 +2,7 @@
 Сервис для работы с транзакциями
 """
 from typing import List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
@@ -64,7 +64,7 @@ class TransactionService:
             category_confidence=confidence,
             category_manual=category_manual,
             source=data.source or "manual",
-            transaction_date=data.transaction_date or datetime.utcnow()
+            transaction_date=data.transaction_date or datetime.now(timezone.utc)
         )
         
         # Проверяем на подозрительность
@@ -164,7 +164,7 @@ class TransactionService:
         if data.is_suspicious is not None:
             transaction.is_suspicious = data.is_suspicious
         
-        transaction.updated_at = datetime.utcnow()
+        transaction.updated_at = datetime.now(timezone.utc)
         
         db.commit()
         db.refresh(transaction)
@@ -194,9 +194,9 @@ class TransactionService:
     ) -> TransactionStats:
         """Получить статистику по транзакциям"""
         if not date_from:
-            date_from = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0)
+            date_from = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0)
         if not date_to:
-            date_to = datetime.utcnow()
+            date_to = datetime.now(timezone.utc)
         
         query = db.query(Transaction).filter(
             and_(
@@ -253,7 +253,7 @@ class TransactionService:
         amount = abs(float(transaction.amount))
         
         # Получаем среднюю сумму в категории за последние 3 месяца
-        three_months_ago = datetime.utcnow() - timedelta(days=90)
+        three_months_ago = datetime.now(timezone.utc) - timedelta(days=90)
         
         if transaction.category_id:
             avg_amount = db.query(func.avg(func.abs(Transaction.amount))).filter(
