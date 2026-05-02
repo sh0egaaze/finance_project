@@ -1,17 +1,16 @@
 """
-Главный файл FastAPI приложения
+Основной файл FastAPI приложения
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyAlchemyError
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from loguru import logger
 from app.scheduler import scheduler, setup_scheduler
 from starlette.middleware.cors import CORSMiddleware
-import re
 
 from app.database import engine, Base
 from app.models import (
@@ -29,8 +28,9 @@ from app.routers import (
     tbank_router,
 )
 
-
 from app.ml.model_loader import registry
+
+settings = get_settings()
 
 def is_allowed_origin(origin: str) -> bool:
     allowed = settings.allowed_origins_list
@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     registry.load_all()
     setup_scheduler()
-    logger.info("✅ Приложение инициализировано!")
+    logger.info("✓ Все модели инициализированы!")
     yield
     scheduler.shutdown(wait=False)
     logger.info("Приложение остановлено.")
@@ -57,19 +57,16 @@ async def lifespan(app: FastAPI):
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="Finance App API",
-    description="API для управления личными финансами",
+    description="API для управления финансовыми операциями",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs" if settings.DEBUG else None,  # теперь settings доступна
+    docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
     openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-settings = get_settings()
-
-# CORS — разрешаем только домены из переменной окружения ALLOWED_ORIGINS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
@@ -77,6 +74,16 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    if not settings.DEBUG:
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 # Роутеры
 app.include_router(auth_router, prefix="/api/v1")
@@ -97,20 +104,22 @@ async def root():
 async def health():
     return {"status": "ok"}
 
-@app.exception_handler(SQLAlchemyError)
-async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+@app.exception_handler(SQLAlchemyAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyAlchemyError):
     logger.error(f"DB Error: {exc}")
     return JSONResponse(
-        status_code=500,
-        content={"detail": "Ошибка базы данных. Повторите позже."}
+       status_code=500,
+       content={"detail": "Ошибка базы данных. Попробуйте позже."}
     )
 
-@app.get("/ml-status")
+@app.get("/ml-status", dependencies=[Depends(get_settings)])
 async def ml_status():
-    """Статус ML-моделей"""
+    """Статус ML-модулей (только для авторизованных)"""
     return {
         "models": {
             name: {"loaded": loaded}
             for name, loaded in registry._loaded.items()
-        }
+        },
+        "total": len(registry._loaded),
+        "loaded_count": sum(1 for v in registry._loaded.values() if v)
     }

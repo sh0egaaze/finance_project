@@ -1,5 +1,5 @@
 """
-Планировщик уведомлений и напоминаний
+Планировщик фоновых и периодических задач
 """
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -15,7 +15,7 @@ scheduler = AsyncIOScheduler()
 
 
 async def process_reminders():
-    """Обработка и отправка уведомлений"""
+    """Обработка и отправка.pending напоминаний"""
     try:
         db: Session = SessionLocal()
     except Exception as e:
@@ -25,7 +25,7 @@ async def process_reminders():
     now = datetime.utcnow()
     
     try:
-        # Находим активные напоминания, время которых наступило
+        # Находим активные периодические уведомления, в том числе корректные настройки
         due_reminders = db.query(Reminder).filter(
             Reminder.is_active == True,
             Reminder.is_completed == False,
@@ -38,6 +38,12 @@ async def process_reminders():
                 if not user:
                     continue
                 
+                if rem.last_sent_date:
+                    from datetime import timedelta
+                    time_since_last = now - rem.last_sent_date
+                    if time_since_last < timedelta(hours=23):
+                        continue
+                   
                 target_email = user.notification_email or user.email
                 success = False
                 error_msg = None
@@ -57,7 +63,7 @@ async def process_reminders():
                 )
                 db.add(history)
                 
-                # Формируем аудит-лог
+                # Сохраняем в аудит-лог
                 audit = AuditLog(
                     user_id=user.id,
                     action="reminder_sent",
@@ -67,11 +73,11 @@ async def process_reminders():
                 )
                 db.add(audit)
                 
-                # Обновляем напоминание
+                # Обновляем периодические уведомления
                 rem.current_count += 1
                 rem.last_sent_date = now
                 
-                # Рассчитываем следующий день и дату
+                # Рассчитываем следующую дату и время
                 if rem.frequency == "daily":
                     rem.next_reminder_date = now + timedelta(days=1)
                 elif rem.frequency == "weekly":
@@ -97,6 +103,6 @@ async def process_reminders():
 
 
 def setup_scheduler():
-    scheduler.add_job(process_reminders, trigger=IntervalTrigger(minutes=5), id="reminders")
+    scheduler.add_job(process_reminders, trigger=IntervalTrigger(minutes=60), id="reminders")
     scheduler.start()
-    logger.info("Планировщик запущен")
+    logger.info("Планировщик инициализирован")

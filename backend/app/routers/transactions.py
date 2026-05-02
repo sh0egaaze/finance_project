@@ -27,7 +27,7 @@ async def smart_input(
     db: Session = Depends(get_db), 
     user: User = Depends(get_current_user)
 ):
-    # Получаем ML-модели через .get() с проверкой
+    # Подключаем ML-модуль через .get() с проверкой на None
     nlp_parser = registry.get("nlp_parser")
     categorizer = registry.get("categorizer")
     
@@ -36,8 +36,8 @@ async def smart_input(
     
     # 1. Парсинг текста
     parsed = registry.get("nlp_parser").parse(data.text)   
-     
-    # 2. Категоризация (если модель загружена)
+    
+    # 2. Категоризация (умная модель загружена)
     category_id = None
     if categorizer and parsed.get("description"):
         cat_pred = categorize(parsed["description"])
@@ -58,7 +58,7 @@ async def smart_input(
 
 class TransactionCreate(BaseModel):
     description: str = Field(..., min_length=1, max_length=500, description="Описание транзакции")
-    amount: Decimal = Field(..., gt=0, description="Сумма > 0. Знак определяется полем is_income")
+    amount: Decimal = Field(..., gt=0, description="Сумма > 0. Если указан флаг is_income")
     is_income: bool = Field(..., description="True = доход, False = расход")
     category_id: Optional[int] = Field(None, description="ID категории")
     transaction_date: Optional[str] = None
@@ -93,7 +93,7 @@ def get_own_transaction(
     if not tx:
         raise HTTPException(
             status_code=404,
-            detail="Транзакция не найдена или у вас нет доступа",
+            detail="Транзакция не найдена или не принадлежит вам",
         )
     return tx
 
@@ -132,7 +132,7 @@ async def update_transaction(
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail="Некорректные данные: категория не существует или нарушение ограничений БД"
+            detail="Недопустимые данные: категория не принадлежит или неверный тип данных БД"
         )
     return {"status": "updated"}
 
@@ -163,27 +163,51 @@ async def delete_transaction(
 
 @router.get("", response_model=list[TransactionResponse])
 async def get_transactions(
-    limit: int = Query(default=50, ge=1, le=200, description="Кол-во записей на страницу"),
-    offset: int = Query(default=0, ge=0, description="Смещение"),
-    category_id: Optional[int] = Query(None),
-    is_income: Optional[bool] = Query(None),
+    limit: int = Query(20, ge=1, le=100, description="Макс. кол-во записей"),
+    offset: int = Query(0, ge=0, description="Смещение"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    query = db.query(Transaction).filter(Transaction.user_id == user.id)
+    """Получение списка транзакций с пагинацией"""
+    transactions = db.query(Transaction).filter(
+        Transaction.user_id == user.id
+    ).order_by(
+        Transaction.transaction_date.desc()
+    ).offset(offset).limit(limit).all()
+    
+    return transactions
 
-    if category_id is not None:
-        query = query.filter(Transaction.category_id == category_id)
-    if is_income is not None:
-        query = query.filter(Transaction.amount > 0 if is_income else Transaction.amount < 0)
 
-    total = query.count()
-    transactions = query.order_by(Transaction.transaction_date.desc()) \
-                        .offset(offset).limit(limit).all()
-
-    return {
-        "items": transactions,
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-    }
+@router.post("", response_model=TransactionResponse, status_code=201)
+async def create_transaction(
+    data: TransactionCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Создание новой транзакции"""
+    tx_date = datetime.utcnow()
+    if data.transaction_date:
+        try:
+            tx_date = datetime.fromisoformat(data.transaction_date)
+        except ValueError:
+            pass
+    
+    tx = Transaction(
+        user_id=user.id,
+        description=data.description,
+        amount=data.amount,
+        category_id=data.category_id,
+        transaction_date=tx_date,
+    )
+    
+    try:
+        db.add(tx)
+        db.commit()
+        db.refresh(tx)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Ошибка при создании: категория не принадлежит вам"
+        )
+    return tx

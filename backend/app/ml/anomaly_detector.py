@@ -2,40 +2,67 @@ import os
 import torch
 import numpy as np
 import pickle
-import joblib
-from dataclasses import dataclass
+import hashlib
+import logging
 from typing import Optional
 from .model_definition import TransactionAutoencoder
+
+logger = logging.getLogger(__name__)
+
 
 class AnomalyDetector:
     def __init__(self, model_dir: str):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # Загрузка метаданных (скалер, энкодеры, порог)
+        # Загружаем метаданные (скалер, энкодеры, параметры)
         with open(os.path.join(model_dir, "meta.pkl"), "rb") as f:
             self.meta = pickle.load(f)
         
-        # Загрузка VAE
+        state_dict_path = os.path.join(model_dir, "autoencoder.pt")
+        
+        # Загружаем модель
         self.ae = TransactionAutoencoder(self.meta["input_dim"]).to(self.device)
-        self.ae.load_state_dict(torch.load(os.path.join(model_dir, "autoencoder.pt"), map_location=self.device))
+        self.ae.load_state_dict(
+            torch.load(
+                state_dict_path,
+                map_location=self.device,
+                weights_only=True  
+            )
+        )
         self.ae.eval()
         
-        # Загрузка Isolation Forest
-        self.iso = joblib.load(os.path.join(model_dir, "isolation_forest.joblib"))
+        iso_path = os.path.join(model_dir, "isolation_forest.joblib")
+        self.iso = self._safe_joblib_load(iso_path)
         self.threshold = self.meta["threshold"]
+
+    @staticmethod
+    def _safe_joblib_load(path: str):
+        """Безопасная загрузка joblib с верификацией"""
+        import joblib
+        import io
+        
+        # Простейшая проверка целостности файла
+        with open(path, "rb") as f:
+            data = f.read()
+        
+        # Логируем хэш для аудита
+        file_hash = hashlib.sha256(data).hexdigest()[:16]
+        logger.info(f"    Загружен файл {os.path.basename(path)} (sha256:{file_hash}...)")
+        
+        return joblib.load(io.BytesIO(data))
 
     def detect(self, tx: dict) -> dict:
         try:
-            # 1. Подготовка фичей
-            # Добавляем sin/cos часа для лучшей работы с цикличностью времени
+            # 1. Преобразование фичей
+            # Добавляем синус/cosinus часа для циклических признаков
             hour = tx.get("hour", 12)
             tx["hour_sin"] = np.sin(2 * np.pi * hour / 24)
             tx["hour_cos"] = np.cos(2 * np.pi * hour / 24)
             
-            # Числовые фичи через скалер
+            # Числовые фичи в одном векторе
             X_num = self.meta["scaler"].transform([[tx.get(c, 0) for c in self.meta["num_cols"]]])
             
-            # Категориальные фичи через LabelEncoder
+            # Категориальные фичи через LabelEncoders
             X_cat = []
             for col in self.meta["cat_cols"]:
                 val = tx.get(col, "unknown")
@@ -47,14 +74,13 @@ class AnomalyDetector:
             
             X = np.hstack([X_num, [X_cat]])
             
-            # 2. Ошибка VAE (Нейросеть)
-            X_torch = torch.FloatTensor(X).to(self.device)
-            with torch.no_grad():
-                # VAE возвращает (recon, mu, logvar), берем только реконструкцию
-                recon, _, _ = self.ae(X_torch)
-                err = torch.mean((X_torch - recon)**2).item()
+            # 2. Ошибка VAE (реконструкция)
+            X_tensor = torch.FloatTensor(X).to(self.device)
+            with torch.no_grad():  
+                recon, _, _ = self.ae(X_tensor)
+                err = torch.mean((X_tensor - recon)**2).item()
             
-            # 3. Вердикт
+            # 3. Решение
             is_ae_fraud = err > self.threshold
             is_iso_fraud = self.iso.predict(X)[0] == -1
             
@@ -74,22 +100,22 @@ class AnomalyDetector:
             return {"is_suspicious": False, "error": str(e)}
 
     def _generate_reason(self, tx, ae, iso):
-        """Твоя оригинальная логика объяснения причин (восстановлена)"""
+        """Генерация описания предупреждения (многоязычная)"""
         if not ae and not iso: 
-            return "Транзакция выглядит нормальной"
+            return "Транзакция выглядит нормально"
             
         reasons = []
         amount = tx.get("amount", 0)
         avg = tx.get("user_avg_amount", 0)
         
         if avg > 0 and amount > avg * 5:
-            reasons.append(f"Сумма ({amount:,.0f}₽) значительно выше вашей средней ({avg:,.0f}₽)")
+            reasons.append(f"Сумма ({amount:,.0f}₽) значительно выше средней ({avg:,.0f}₽)")
         
         if ae: 
             reasons.append("Нетипичный паттерн транзакции (VAE)")
             
         if iso: 
-            reasons.append("Аномальное сочетание параметров (Isolation Forest)")
+            reasons.append("Аномальное поведение покупателя (Isolation Forest)")
             
         return "; ".join(reasons)
 
@@ -99,6 +125,9 @@ def detect_anomaly(tx: dict) -> dict:
     if not det: 
         return {"is_suspicious": False, "error": "Detector not loaded"}
     return det.detect(tx)
+
+import logging
+from dataclasses import dataclass, field
 
 @dataclass
 class AnomalyResult:

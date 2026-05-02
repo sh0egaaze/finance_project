@@ -1,5 +1,5 @@
 """
-Конфигурация приложения
+Модуль конфигурации приложения
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
@@ -8,7 +8,7 @@ from typing import List, ClassVar
 
 
 class Settings(BaseSettings):
-    """Настройки для инициализации приложения"""
+    """Настройки для конфигурации приложения"""
     
     # База данных
     DATABASE_URL: str
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
             import warnings
             warnings.warn(
                 "⚠️ DEBUG=True! Не используйте в продакшене. "
-                "API-документация будет доступна публично.",
+                "API-документация будет доступна по адресу /docs.",
                 stacklevel=2
             )
         return v
@@ -47,15 +47,15 @@ class Settings(BaseSettings):
     @classmethod
     def secret_key_strong(cls, v: str) -> str:
         if len(v) < 32:
-            raise ValueError("SECRET_KEY слишком короткий!")
+            raise ValueError("SECRET_KEY недостаточно длинный!")
         if v in cls.KNOWN_WEAK_KEYS:
-            raise ValueError("SECRET_KEY является нежёстким значением!")
+            raise ValueError("SECRET_KEY обнаружен в нежелательных списках!")
         return v
     
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # Т-Банк API
+    # Тинькофф API
     TBANK_API_URL: str = "https://business.tbank.ru/openapi"
     TBANK_TOKEN: str = Field(..., env="TBANK_TOKEN")
     
@@ -70,7 +70,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     EMAIL_FROM: str = ""
     
-    # Приложение
+    # Ключ шифрования банковских токенов (ОТДЕЛЬНЫЙ от JWT!)
+    TBANK_ENCRYPTION_KEY: str = Field("", env="TBANK_ENCRYPTION_KEY")
+    
+    # Происхождение
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     
     @property
@@ -86,5 +89,5 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Получить настройки (кэшированный синглтон)"""
+    """Возвращает настройки (кэшированный синглтон)"""
     return Settings()

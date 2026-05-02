@@ -2,17 +2,19 @@ import torch
 import torch.nn as nn
 from transformers import AutoModel
 
+
 class FinanceNLPModel(nn.Module):
     """
-    NLP Модель (Версия 2.0 - Только текст).
-    Убрали предсказание суммы, чтобы сосредоточиться на BIO-тегах и классификации.
+    NLP Модуль (Версия 2.0 - поддержка токизации).
+    Объединённый ресурсы, читает тексты и распознаёт
+    дополнительные БИО-теги и категоризации.
     """
-    def __init__(self, pretrained_model_name: str, num_bio_labels: int = 3):
+    def __init__(self, pretrained_model_name: str, num_bio_labels: int = 11):  
         super().__init__()
         self.bert = AutoModel.from_pretrained(pretrained_model_name)
         hidden_size = self.bert.config.hidden_size
         
-        # Доход/Расход
+        # Доход/расход
         self.income_head = nn.Sequential(
             nn.Dropout(0.1),
             nn.Linear(hidden_size, 128),
@@ -39,7 +41,7 @@ class FinanceNLPModel(nn.Module):
         return income_logits, bio_logits
 
 class TransactionAutoencoder(nn.Module):
-    """Продвинутый VAE для детекции аномалий"""
+    """Предобученный VAE для транзакций anomalies"""
     def __init__(self, input_dim, hidden_dim=64, latent_dim=8):
         super().__init__()
         self.input_dim = input_dim
@@ -65,6 +67,7 @@ class TransactionAutoencoder(nn.Module):
             nn.Linear(hidden_dim // 2, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.GELU(),
+            nn.Dropout(0.1),
             nn.Linear(hidden_dim, input_dim)
         )
 
@@ -83,7 +86,8 @@ class TransactionAutoencoder(nn.Module):
         return self.decoder(z), mu, logvar
 
     def get_reconstruction_error(self, x):
+        was_training = self.training
         self.eval()
-        with torch.no_grad():
+        with torch.no_grad():  
             recon, mu, logvar = self.forward(x)
             return torch.mean((x - recon)**2, dim=1)
