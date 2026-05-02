@@ -1,6 +1,4 @@
-"""
-Основной файл FastAPI приложения
-"""
+"""Основный файл FastAPI приложения"""
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
@@ -28,20 +26,11 @@ from app.routers import (
     tbank_router,
 )
 
+from app.routers.auth import get_current_user
+
 from app.ml.model_loader import registry
 
 settings = get_settings()
-
-def is_allowed_origin(origin: str) -> bool:
-    allowed = settings.allowed_origins_list
-    for pattern in allowed:
-        if origin == pattern:
-            return True
-        if pattern.startswith("*."):
-            domain = pattern[2:]
-            if origin.endswith(domain):
-                return True
-    return False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,7 +38,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     registry.load_all()
     setup_scheduler()
-    logger.info("✓ Все модели инициализированы!")
+    logger.info("✅ Все инициализации завершены!")
     yield
     scheduler.shutdown(wait=False)
     logger.info("Приложение остановлено.")
@@ -57,7 +46,7 @@ async def lifespan(app: FastAPI):
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="Finance App API",
-    description="API для управления финансовыми операциями",
+    description="API для управления личными финансами и расходов",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.DEBUG else None,
@@ -69,7 +58,8 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins_list,
+    allow_origins=settings.allowed_origins_list if settings.DEBUG else [],
+    allow_origin_regex=r"https://(.*.)?yourdomain.com" if not settings.DEBUG else None,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
@@ -83,6 +73,13 @@ async def add_security_headers(request: Request, call_next):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'"
+        )
     return response
 
 # Роутеры
@@ -108,12 +105,12 @@ async def health():
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyAlchemyError):
     logger.error(f"DB Error: {exc}")
     return JSONResponse(
-       status_code=500,
-       content={"detail": "Ошибка базы данных. Попробуйте позже."}
+        status_code=500,
+        content={"detail": "Ошибка базы данных. Попробуйте позже."}
     )
 
-@app.get("/ml-status", dependencies=[Depends(get_settings)])
-async def ml_status():
+@app.get("/ml-status")
+async def ml_status(current_user: User = Depends(get_current_user)):
     """Статус ML-модулей (только для авторизованных)"""
     return {
         "models": {

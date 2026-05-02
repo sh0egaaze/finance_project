@@ -68,14 +68,22 @@ class FinanceParser:
         
         # Список всех эталонных слов для коррекции опечаток
         self.vocab_words = list(RUS_NUMBERS.keys())
+        
+        self._typo_cache: dict[str, str | None] = {}
 
     def _fix_typos(self, word: str):
-        """Исправляет опечатки в словах-числах"""
+        """Исправляет опечатки в словах-числах (с кэшированием)"""
+        if word in self._typo_cache:
+            return self._typo_cache[word]
+        
         if word in RUS_NUMBERS:
+            self._typo_cache[word] = word
             return word
         # Ищем максимально похожее слово (точность 80%)
         matches = difflib.get_close_matches(word, self.vocab_words, n=1, cutoff=0.8)
-        return matches[0] if matches else None
+        result = matches[0] if matches else None
+        self._typo_cache[word] = result
+        return result
 
     def _words_to_num(self, text: str):
         """Продвинутая конвертация текста в число"""
@@ -115,15 +123,13 @@ class FinanceParser:
     def _extract_amount(self, text: str):
         """Приоритет извлечения: Цифры -> Текст"""
         # 1. Ищем явные числа (например '150.50' или '1 500')
-        # Убираем пробелы между цифрами для поддержки '1 000'
         text_no_spaces = re.sub(r'(?<=\d)\s(?=\d)', '', text)
         match = re.search(r'(\d+[\.,]?\d*)', text_no_spaces)
         if match:
             try:
                 amt = float(match.group(1).replace(",", "."))
-                # Если число адекватно маленькое (например '1'), проверим нет ли дальше слов типа 'тысяча'
                 if amt < 1000 and ('тысяч' in text or 'косарь' in text or 'лям' in text):
-                    pass # идем к текстовому парсеру
+                    pass
                 else:
                     return amt
             except: pass

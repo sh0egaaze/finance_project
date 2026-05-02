@@ -1,8 +1,6 @@
-"""
-Аутентификационные endpoints
-"""
+"""Аутентификационные endpoints"""
 from app.config import get_settings
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -11,11 +9,15 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, EmailStr, field_validator
 from passlib.context import CryptContext
 from jose import JWTError, jwt
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.models import User, Category
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+limiter = Limiter(key_func=get_remote_address)
 
 # Настройки
 _settings = get_settings()
@@ -132,9 +134,8 @@ async def get_current_user(
 # ======== Эндпоинты ========
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/hour")
-async def register(data: UserCreate, db: Session = Depends(get_db)):
+async def register(request: Request, data: UserCreate, db: Session = Depends(get_db)):
     """Регистрация нового пользователя"""
-    from slowapi import Limiter
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
         raise HTTPException(
@@ -171,8 +172,9 @@ async def register(data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/token", response_model=Token)
+@limiter.limit("10/minute")
 async def login(
-    request: Request,  # Нужно для slowapi
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):

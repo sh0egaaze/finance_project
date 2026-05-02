@@ -1,6 +1,4 @@
-"""
-Модуль конфигурации приложения
-"""
+"""Модуль конфигурации приложения"""
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
 from functools import lru_cache
@@ -15,7 +13,7 @@ class Settings(BaseSettings):
     
     # JWT
     SECRET_KEY: str
-    # Для генерации ключа: python -c "import secrets; print(secrets.token_hex(32))"
+    # Секрет для генерации ключей: python -c "import secrets; print(secrets.token_hex(32))"
 
     KNOWN_WEAK_KEYS: ClassVar[tuple] = (
         "secret",
@@ -38,7 +36,7 @@ class Settings(BaseSettings):
             import warnings
             warnings.warn(
                 "⚠️ DEBUG=True! Не используйте в продакшене. "
-                "API-документация будет доступна по адресу /docs.",
+                "API-документация будет доступна по пути /docs.",
                 stacklevel=2
             )
         return v
@@ -49,7 +47,7 @@ class Settings(BaseSettings):
         if len(v) < 32:
             raise ValueError("SECRET_KEY недостаточно длинный!")
         if v in cls.KNOWN_WEAK_KEYS:
-            raise ValueError("SECRET_KEY обнаружен в нежелательных списках!")
+            raise ValueError("SECRET_KEY находится в списке небезопасных ключей!")
         return v
     
     ALGORITHM: str = "HS256"
@@ -70,10 +68,21 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     EMAIL_FROM: str = ""
     
-    # Ключ шифрования банковских токенов (ОТДЕЛЬНЫЙ от JWT!)
+    @field_validator("SMTP_USER")
+    @classmethod
+    def validate_smtp_user(cls, v: str) -> str:
+        if not v:
+            import warnings
+            warnings.warn(
+                "⚠️ SMTP_USER не задан! Email-уведомления не будут работать. "
+                "Укажите SMTP_USER, SMTP_PASSWORD и EMAIL_FROM в .env для production.",
+                stacklevel=2
+            )
+        return v
+    
+    # Ключи шифрования банковских токенов (ОТДЕЛЬНО ОТ JWT!)
     TBANK_ENCRYPTION_KEY: str = Field("", env="TBANK_ENCRYPTION_KEY")
     
-    # Происхождение
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     
     @property
@@ -89,5 +98,5 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Возвращает настройки (кэшированный синглтон)"""
+    """Загрузка настроек (кэшируется автоматически)"""
     return Settings()
