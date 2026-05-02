@@ -30,7 +30,7 @@ class CategoryPrediction:
     category_code: str
     category_name: str
     confidence: float
-    method: str             # "rubert" | "fallback"
+    method: str             # "rubert" | "fallback" | "fallback_no_match" | "empty_input"
     top_3: List[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -185,16 +185,18 @@ def _fallback_predict(text: str) -> "CategoryPrediction":
                     }],
                 )
 
+    logger.info(
+        "Текст не распознан fallback-категоризатором: '%s' — "
+        "отправлено в очередь для дообучения",
+        text,
+    )
+
     return CategoryPrediction(
         category_code="other",
-        category_name="Прочее",
-        confidence=0.3,
-        method="fallback",
-        top_3=[{
-            "category_code": "other",
-            "category_name": "Прочее",
-            "confidence": 0.3,
-        }],
+        category_name="Другое",
+        confidence=0.0,
+        method="fallback_no_match",
+        top_3=[],
     )
 
 
@@ -221,6 +223,15 @@ def categorize(description: str) -> CategoryPrediction:
     """
     Категоризировать одну транзакцию.
     """
+    if not description or not isinstance(description, str) or not description.strip():
+        return CategoryPrediction(
+            category_code="other",
+            category_name="Другое",
+            confidence=0.0,
+            method="empty_input",
+            top_3=[],
+        )
+
     from .model_loader import registry
 
     model_data = registry.get("categorizer")
@@ -231,10 +242,18 @@ def categorize(description: str) -> CategoryPrediction:
 
     try:
         processed = preprocess_text(description)
+        if not processed:
+            return CategoryPrediction(
+                category_code="other",
+                category_name="Другое",
+                confidence=0.0,
+                method="empty_input",
+                top_3=[],
+            )
         return _predict_rubert(processed, model_data)
 
     except Exception as e:
-        logger.error(f"Ошибка категоризации '{description}': {e}")
+        logger.error("Ошибка категоризации '%s': %s", description, e)
         return _fallback_predict(description)
 
 
