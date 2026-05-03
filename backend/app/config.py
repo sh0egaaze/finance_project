@@ -48,6 +48,11 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY недостаточно длинный!")
         if v in cls.KNOWN_WEAK_KEYS:
             raise ValueError("SECRET_KEY находится в списке небезопасных ключей!")
+        if "сгенерируйте" in v.lower() or "generate" in v.lower() or v.startswith("<"):
+            raise ValueError(
+                "SECRET_KEY не был установлен! Сгенерируйте настоящий ключ: "
+                "python -c 'import secrets; print(secrets.token_hex(32))'"
+            )
         return v
     
     ALGORITHM: str = "HS256"
@@ -81,8 +86,18 @@ class Settings(BaseSettings):
         return v
     
     # Ключи шифрования банковских токенов (ОТДЕЛЬНО ОТ JWT!)
-    TBANK_ENCRYPTION_KEY: str = Field("", env="TBANK_ENCRYPTION_KEY")
-    
+    TBANK_ENCRYPTION_KEY: str = Field(..., env="TBANK_ENCRYPTION_KEY")
+
+    @field_validator("TBANK_ENCRYPTION_KEY")
+    @classmethod
+    def validate_encryption_key(cls, v: str) -> str:
+        if not v or len(v) < 32:
+            raise ValueError(
+                "TBANK_ENCRYPTION_KEY должен быть установлен и содержать минимум 32 символа! "
+                "Сгенерируйте: python -c 'import secrets; print(secrets.token_hex(32))'"
+            )
+        return v
+        
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     
     @property
