@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     
     # Курсы валют API
     CURRENCY_API_URL: str = "https://api.exchangerate-api.com/v4/latest"
-    CURRENCY_API_KEY: str = Field(..., env="CURRENCY_API_KEY")
+    CURRENCY_API_KEY: str = Field("", env="CURRENCY_API_KEY")
     
     # Email (SMTP)
     SMTP_HOST: str = "smtp.gmail.com"

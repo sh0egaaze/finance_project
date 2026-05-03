@@ -164,7 +164,8 @@ async def get_current_user(
     user = db.query(User).filter(User.id == user_id_int).first()
     if user is None:
         raise credentials_exception
-
+    if not user.is_active:
+        raise HTTPException(403, "Аккаунт деактивирован")
     return user
 
 
@@ -177,8 +178,7 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
     if existing:
         raise HTTPException(
             status_code=400,
-            detail="Регистрация невозможна. "
-                   "Ведь вы уже зарегистрированы, вернитесь."
+            detail="Если этот email свободен, регистрация выполнена"
         )
 
     user = User(

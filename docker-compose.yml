@@ -15,7 +15,7 @@ services:
     ports:
       - "5433:5432"  # Внешний порт 5433 (чтобы не конфликтовать с локальным PostgreSQL)
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U finance_user -d finance_app"]
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,6 +35,8 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       TBANK_API_URL: https://business.tbank.ru/openapi
       TBANK_TOKEN: ${TBANK_TOKEN:-}
+      TBANK_ENCRYPTION_KEY: ${TBANK_ENCRYPTION_KEY}
+      TBANK_SANDBOX: ${TBANK_SANDBOX:-true}
       CURRENCY_API_URL: https://api.exchangerate-api.com/v4/latest
       CURRENCY_API_KEY: ${CURRENCY_API_KEY:-}
       SMTP_HOST: ${SMTP_HOST:-}

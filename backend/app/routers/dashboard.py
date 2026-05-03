@@ -4,7 +4,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from pydantic import BaseModel
 
@@ -36,7 +36,9 @@ async def get_dashboard(
     month_ago = now - timedelta(days=30)
     
     # Получаем транзакции за месяц
-    transactions = db.query(Transaction).filter(
+    transactions = db.query(Transaction)/options(
+        joinedload(Transaction.category)
+    ).filter(
         Transaction.user_id == current_user.id,
         Transaction.transaction_date >= month_ago
     ).all()

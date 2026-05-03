@@ -35,7 +35,7 @@ async def smart_input(
         raise HTTPException(status_code=503, detail="NLP-парсер не загружен")
     
     # 1. Парсинг текста
-    parsed = registry.get("nlp_parser").parse(data.text)   
+    parsed = nlp_parser.parse(data.text)   
     
     # 2. Категоризация (умная модель загружена)
     category_id = None

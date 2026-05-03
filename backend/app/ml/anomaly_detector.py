@@ -52,6 +52,7 @@ class AnomalyDetector:
         return joblib.load(io.BytesIO(data))
 
     def detect(self, tx: dict) -> dict:
+        data = dict(tx)
         try:
             # 1. Преобразование фичей
             # Добавляем синус/cosinus часа для циклических признаков

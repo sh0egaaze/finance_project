@@ -43,7 +43,10 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown(wait=False)
     logger.info("Приложение остановлено.")
 
-limiter = Limiter(key_func=get_remote_address)
+def get_real_ip(request):
+    fwd = request.headers.get("X-Forwarded-For")
+    return fwd.split(",")[0].strip() if fwd else get_remote_address(request)
+limiter = Limiter(key_func=get_real_ip)
 app = FastAPI(
     title="Finance App API",
     description="API для управления личными финансами и расходов",
@@ -58,8 +61,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins_list if settings.DEBUG else [],
-    allow_origin_regex=r"https://(.*.)?yourdomain.com" if not settings.DEBUG else None,
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],

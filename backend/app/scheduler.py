@@ -5,6 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
+from dateutil.relativedelta import relativedelta
 from loguru import logger
 
 from .database import SessionLocal
@@ -34,7 +35,7 @@ async def process_reminders():
         
         for rem in due_reminders:
             try:
-                user = db.query(User).get(rem.user_id)
+                user = db.get(User, rem.user_id)
                 if not user:
                     continue
                 
@@ -82,7 +83,7 @@ async def process_reminders():
                 elif rem.frequency == "weekly":
                     rem.next_reminder_date = now + timedelta(weeks=1)
                 elif rem.frequency == "monthly":
-                    rem.next_reminder_date = now + timedelta(months=1)
+                    rem.next_reminder_date = now + relativedelta(months=1)
                 elif rem.frequency == "once":
                     rem.is_completed = True
                 

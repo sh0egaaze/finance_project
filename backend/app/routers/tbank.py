@@ -45,8 +45,9 @@ def derive_fernet_key(secret_key: str, salt: bytes | None = None) -> tuple[bytes
 
 
 def _decrypt_token(encrypted: str, salt_b64: str | None, secret_key: str) -> str:
-    """Расшифровка токена через PBKDF2 (используется везде)"""
-    salt = base64.urlsafe_b64decode(salt_b64.encode()) if salt_b64 else None
+    if not salt_b64:
+        raise InvalidToken("Salt не сохранён. Переподключите Т-Банк.")
+    salt = base64.urlsafe_b64decode(salt_b64.encode())
     key, _ = derive_fernet_key(secret_key, salt)
     f = Fernet(key)
     return f.decrypt(encrypted.encode()).decode()
@@ -399,8 +400,8 @@ async def sync_tbank(
 # ========================================================
 
 MCC_CATEGORY_MAP = {
-    "5411": "food", "5422": "food", "5441": "food", "5451": "food",
-    "5462": "food", "5912": "food",
+    "5411": "food", "5422": "food", "5441": "food",
+    "5451": "food", "5462": "food",
     "5812": "restaurants", "5813": "restaurants", "5814": "restaurants",
     "4111": "transport", "4121": "transport", "4131": "transport",
     "4784": "transport", "5542": "transport",

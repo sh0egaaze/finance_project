@@ -88,6 +88,10 @@ class TransactionAutoencoder(nn.Module):
     def get_reconstruction_error(self, x):
         was_training = self.training
         self.eval()
-        with torch.no_grad():  
-            recon, mu, logvar = self.forward(x)
-            return torch.mean((x - recon)**2, dim=1)
+        try:
+            with torch.no_grad():
+                recon, mu, logvar = self.forward(x)
+                return torch.mean((x - recon)**2, dim=1)
+        finally:
+            if was_training:
+                self.train()
