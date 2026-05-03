@@ -4,7 +4,7 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from loguru import logger
 
 from .database import SessionLocal
@@ -39,7 +39,6 @@ async def process_reminders():
                     continue
                 
                 if rem.last_sent_date:
-                    from datetime import timedelta
                     time_since_last = now - rem.last_sent_date
                     if time_since_last < timedelta(hours=23):
                         continue
