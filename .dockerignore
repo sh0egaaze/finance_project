@@ -1,13 +1,14 @@
 # Node modules
 node_modules/
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-.pnpm-store/
 
-# Backend (не нужен для frontend build)
+# Backend (НЕ нужен для frontend)
 backend/
+
+# ML модели и обучение (КРИТИЧНО!)
+ml_training/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -15,51 +16,35 @@ __pycache__/
 .Python
 venv/
 env/
-ENV/
 
 # Git
 .git/
 .gitignore
-.gitattributes
 
 # IDE
 .vscode/
 .idea/
 *.swp
-*.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
 # Logs
 *.log
 logs/
 
-# Temp files
-*.tmp
-*.temp
-.cache/
-
 # Build artifacts
 dist/
 build/
-.next/
-out/
 
 # Environment
 .env
 .env.local
-.env.*.local
 
 # Docker
 docker-compose.yml
 Dockerfile*
-.dockerignore
 
 # Misc
 *.md
-LICENSE
-.editorconfig

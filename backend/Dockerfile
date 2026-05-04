@@ -1,9 +1,8 @@
-# Dockerfile для Backend
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Установка системных зависимостей
+# Установка только системных зависимостей
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
@@ -13,18 +12,15 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копирование кода
+# Копирование кода (БЕЗ ml_training благодаря .dockerignore)
 COPY . .
 
-# Создание директории для логов
-RUN mkdir -p logs ml_models
+# Создание директорий
+RUN mkdir -p logs
 
-# Переменные окружения
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Порт
 EXPOSE 8000
 
-# Запуск
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

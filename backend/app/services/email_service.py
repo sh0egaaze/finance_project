@@ -8,7 +8,7 @@ import aiosmtplib
 from loguru import logger
 
 from ..config import get_settings
-from ..models.reminder import Reminder
+from ..models import Reminder
 
 settings = get_settings()
 

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from loguru import logger
 
-from ..models.reminder import Reminder, ReminderFrequency
+from ..models import Reminder, ReminderFrequency
 from ..schemas.reminder import ReminderCreate, ReminderUpdate
 
 
