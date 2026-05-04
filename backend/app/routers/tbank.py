@@ -1,5 +1,5 @@
 """
-Роутер для интеграции с Т-Банком
+Роутер для интеграции с Т-Банком (Production версия без демо-данных)
 """
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -45,6 +45,7 @@ def derive_fernet_key(secret_key: str, salt: bytes | None = None) -> tuple[bytes
 
 
 def _decrypt_token(encrypted: str, salt_b64: str | None, secret_key: str) -> str:
+    """Расшифровка токена Т-Банка"""
     if not salt_b64:
         raise InvalidToken("Salt не сохранён. Переподключите Т-Банк.")
     salt = base64.urlsafe_b64decode(salt_b64.encode())
@@ -98,12 +99,12 @@ async def get_tbank_status(
     
     _s = get_settings()
     
-    # ✅ Раздельные блоки try для разных типов ошибок
+    # Расшифровка токена
     try:
         token = _decrypt_token(
             current_user.tbank_token_encrypted,
             current_user.tbank_token_salt,
-            _s.TBANK_ENCRYPTION_KEY  # ← ОТДЕЛЬНЫЙ КЛЮЧ
+            _s.TBANK_ENCRYPTION_KEY
         )
     except InvalidToken:
         logger.error("Не удалось расшифровать токен — возможно, изменён ключ шифрования")
@@ -122,6 +123,7 @@ async def get_tbank_status(
             "message": "Внутренняя ошибка. Обратитесь в поддержку."
         }
     
+    # Проверка подключения через API
     try:
         headers = {
             "Authorization": f"Bearer {token}",
@@ -182,9 +184,9 @@ async def get_tbank_status(
 # POST /connect — подключение Т-Банка
 # ========================================================
 @router.post("/connect", response_model=TBankStatusResponse)
-@limiter.limit("3/minute")  # ← RATE LIMITING!
+@limiter.limit("3/minute")
 async def connect_tbank(
-    request: Request,  # ← Нужно для slowapi
+    request: Request,
     data: TBankConnectRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -198,7 +200,7 @@ async def connect_tbank(
     
     _s = get_settings()
     
-    # ✅ СНАЧАЛА проверяем токен через T-Bank API
+    # Проверяем токен через T-Bank API
     try:
         headers = {
             "Authorization": f"Bearer {data.token}",
@@ -222,15 +224,15 @@ async def connect_tbank(
             detail="T-Bank API недоступен. Попробуйте позже."
         )
     
-    # ✅ ТОЛЬКО после проверки — шифруем и сохраняем
-    key, salt = derive_fernet_key(_s.TBANK_ENCRYPTION_KEY)  # ← ОТДЕЛЬНЫЙ КЛЮЧ!
+    # Шифруем и сохраняем токен
+    key, salt = derive_fernet_key(_s.TBANK_ENCRYPTION_KEY)
     f = Fernet(key)
     encrypted = f.encrypt(data.token.encode()).decode()
     salt_str = base64.urlsafe_b64encode(salt).decode()
 
     current_user.tbank_token_encrypted = encrypted
     current_user.tbank_token_salt = salt_str
-    current_user.updated_at = datetime.now(timezone.utc)  # ← НЕ utcnow()!
+    current_user.updated_at = datetime.now(timezone.utc)
     db.commit()
     
     return {
@@ -252,7 +254,7 @@ async def disconnect_tbank(
     """Отключение Т-Банка"""
     current_user.tbank_token_encrypted = None
     current_user.tbank_token_salt = None
-    current_user.updated_at = datetime.now(timezone.utc)  # ← НЕ utcnow()!
+    current_user.updated_at = datetime.now(timezone.utc)
     db.commit()
     
     return {"message": "Т-Банк отключён"}
@@ -264,7 +266,7 @@ async def disconnect_tbank(
 @router.post("/sync")
 @limiter.limit("5/minute")
 async def sync_tbank(
-    request: Request,  # ← Нужно для slowapi
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -275,13 +277,13 @@ async def sync_tbank(
             detail="Т-Банк не подключён. Сначала подключитесь в настройках."
         )
     
-    # 1. Расшифровка токена
+    # Расшифровка токена
     _s = get_settings()
     try:
         token = _decrypt_token(
             current_user.tbank_token_encrypted,
             current_user.tbank_token_salt,
-            _s.TBANK_ENCRYPTION_KEY  # ← ОТДЕЛЬНЫЙ КЛЮЧ!
+            _s.TBANK_ENCRYPTION_KEY
         )
     except InvalidToken:
         logger.error("Не удалось расшифровать токен — возможно, изменён ключ шифрования")
@@ -301,10 +303,10 @@ async def sync_tbank(
         "Content-Type": "application/json"
     }
 
-    # 2. Запрашиваем операции по API
-    async with httpx.AsyncClient() as client:
-        try:
-            # Шаг А: Проверяем наличие аккаунтов
+    # Запрашиваем операции по API
+    try:
+        async with httpx.AsyncClient() as client:
+            # Проверяем наличие аккаунтов
             accounts_response = await client.post(
                 f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
                 headers=headers,
@@ -314,12 +316,15 @@ async def sync_tbank(
             
             if accounts_response.status_code != 200:
                 logger.warning(f"T-Bank API rejected token: {accounts_response.status_code}")
-                return await _add_demo_transactions(db, current_user)
+                raise HTTPException(
+                    status_code=503,
+                    detail="T-Bank API временно недоступен. Попробуйте позже."
+                )
             
             accounts_data = accounts_response.json()
             accounts = accounts_data.get("accounts", [])
             
-            # Шаг Б: Если аккаунтов нет, создаём
+            # Если аккаунтов нет, создаём
             if not accounts:
                 create_response = await client.post(
                     f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/OpenSandboxAccount",
@@ -330,12 +335,15 @@ async def sync_tbank(
                 if create_response.status_code == 200:
                     account_id = create_response.json().get("accountId")
                 else:
-                    return await _add_demo_transactions(db, current_user)
+                    raise HTTPException(
+                        status_code=503,
+                        detail="T-Bank API временно недоступен. Попробуйте позже."
+                    )
             else:
                 account_id = accounts[0].get("accountId")
             
-            # Шаг В: Получаем операции
-            now = datetime.now(timezone.utc)  # ← НЕ utcnow()!
+            # Получаем операции за последние 30 дней
+            now = datetime.now(timezone.utc)
             from_date = now - timedelta(days=30)
             operations_response = await client.post(
                 f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxOperations",
@@ -349,14 +357,19 @@ async def sync_tbank(
             )
             
             if operations_response.status_code != 200:
-                return await _add_demo_transactions(db, current_user)
+                raise HTTPException(
+                    status_code=503,
+                    detail="T-Bank API временно недоступен. Попробуйте позже."
+                )
             
             operations = operations_response.json().get("operations", [])
             
-            # Шаг Г: Сохраняем транзакции
+            # Сохраняем транзакции в базу данных
             added_count = 0
             for op in operations:
                 ext_id = op.get("id", "")
+                
+                # Проверяем, не существует ли уже такая транзакция
                 existing = db.query(Transaction).filter(
                     Transaction.external_id == ext_id,
                     Transaction.user_id == current_user.id
@@ -364,6 +377,7 @@ async def sync_tbank(
                 if existing:
                     continue
                 
+                # Определяем категорию по MCC-коду
                 mcc = str(op.get("mcc", ""))
                 cat = _find_category_by_mcc(db, mcc, current_user.id)
                 
@@ -385,14 +399,25 @@ async def sync_tbank(
                 added_count += 1
             
             db.commit()
-            return {"message": f"Синхронизация завершена. Добавлено: {added_count}", "added": added_count}
+            return {
+                "message": f"Синхронизация завершена. Добавлено транзакций: {added_count}",
+                "added": added_count
+            }
             
-        except httpx.TimeoutException:
-            logger.error("T-Bank API timeout")
-            return await _add_demo_transactions(db, current_user)
-        except Exception as e:
-            logger.error(f"T-Bank sync error: {e}")
-            return await _add_demo_transactions(db, current_user)
+    except httpx.TimeoutException:
+        logger.error("T-Bank API timeout")
+        raise HTTPException(
+            status_code=503,
+            detail="T-Bank API временно недоступен. Попробуйте позже."
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"T-Bank sync error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Ошибка синхронизации с T-Bank API"
+        )
 
 
 # ========================================================
@@ -424,52 +449,3 @@ def _find_category_by_mcc(db: Session, mcc: str, user_id: int):
         Category.code == category_code,
         Category.user_id == user_id
     ).first()
-
-
-DEMO_TRANSACTIONS = [
-    {"desc": "Перекус в кафе", "amount": -450.00, "cat": "restaurants", "mcc": "5812"},
-    {"desc": "Яндекс Про", "amount": -320.00, "cat": "transport", "mcc": "4121"},
-    {"desc": "Пятёрочка", "amount": -2380.50, "cat": "food", "mcc": "5411"},
-    {"desc": "Зарплата", "amount": 85000.00, "cat": "salary", "mcc": ""},
-    {"desc": "Ozon", "amount": -1750.00, "cat": "shopping", "mcc": "5200"},
-    {"desc": "Аптека", "amount": -890.00, "cat": "health", "mcc": "5912"},
-    {"desc": "Netflix", "amount": -799.00, "cat": "entertainment", "mcc": "5815"},
-    {"desc": "ЖКХ", "amount": -5400.00, "cat": "housing", "mcc": "6011"},
-]
-
-
-async def _add_demo_transactions(db: Session, user: User):
-    """Fallback: демо-транзакции если API недоступен"""
-    existing_demo = db.query(Transaction).filter(
-        Transaction.user_id == user.id,
-        Transaction.source == TransactionSource.tbank_api,
-        Transaction.description.in_([d["desc"] for d in DEMO_TRANSACTIONS])
-    ).first()
-    
-    if existing_demo:
-        return {"message": "Демо-данные уже загружены", "added": 0, "demo": True}
-    
-    added = 0
-    for dt in DEMO_TRANSACTIONS:
-        cat = db.query(Category).filter(
-            Category.code == dt["cat"],
-            Category.user_id == user.id
-        ).first()
-        
-        tx = Transaction(
-            user_id=user.id,
-            category_id=cat.id if cat else None,
-            amount=dt["amount"],
-            currency="RUB",
-            description=dt["desc"],
-            source=TransactionSource.tbank_api,
-            external_id=f"demo-{dt['cat']}-{added}",
-            merchant_name=dt["desc"],
-            merchant_category_code=dt["mcc"],
-            transaction_date=datetime.now(timezone.utc),  # ← НЕ utcnow()!
-        )
-        db.add(tx)
-        added += 1
-    
-    db.commit()
-    return {"message": f"⚠️ API недоступен. Загружены демо-данные ({added} операций)", "added": added, "demo": True}
