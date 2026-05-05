@@ -14,17 +14,15 @@ class FinanceNLPModel(nn.Module):
         self.bert = AutoModel.from_pretrained(pretrained_model_name)
         hidden_size = self.bert.config.hidden_size
         
-        # Доход/расход
+        # Доход/расход (УБРАЛ Dropout)
         self.income_head = nn.Sequential(
-            nn.Dropout(0.1),
             nn.Linear(hidden_size, 128),
             nn.GELU(),
             nn.Linear(128, 2)
         )
         
-        # Описание (BIO)
+        # Описание (BIO) (УБРАЛ Dropout)
         self.description_head = nn.Sequential(
-            nn.Dropout(0.1),
             nn.Linear(hidden_size, 128),
             nn.GELU(),
             nn.Linear(128, num_bio_labels)
@@ -46,12 +44,11 @@ class TransactionAutoencoder(nn.Module):
         super().__init__()
         self.input_dim = input_dim
         
-        # Encoder
+        # Encoder (УБРАЛ Dropout)
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.GELU(),
-            nn.Dropout(0.1),
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.GELU()
         )
@@ -60,14 +57,13 @@ class TransactionAutoencoder(nn.Module):
         self.fc_mu = nn.Linear(hidden_dim // 2, latent_dim)
         self.fc_logvar = nn.Linear(hidden_dim // 2, latent_dim)
         
-        # Decoder
+        # Decoder (УБРАЛ Dropout)
         self.decoder = nn.Sequential(
             nn.Linear(latent_dim, hidden_dim // 2),
             nn.GELU(),
             nn.Linear(hidden_dim // 2, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.GELU(),
-            nn.Dropout(0.1),
             nn.Linear(hidden_dim, input_dim)
         )
 
