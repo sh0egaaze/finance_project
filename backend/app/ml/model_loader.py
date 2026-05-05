@@ -9,7 +9,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Путь к папке с обученными моделями
-MODELS_BASE_DIR = Path(__file__).parent / "trained_models"
+MODELS_BASE_DIR = Path(__file__).parent.parent / "ml" / "trained_models"
 
 class ModelRegistry:
     def __init__(self):

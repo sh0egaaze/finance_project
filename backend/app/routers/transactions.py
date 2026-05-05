@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
@@ -19,42 +19,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 limiter = Limiter(key_func=get_remote_address)
-
-@router.post("/smart-input")
-@limiter.limit("30/minute")
-async def smart_input(
-    data: SmartInputRequest,
-    db: Session = Depends(get_db), 
-    user: User = Depends(get_current_user)
-):
-    # Подключаем ML-модуль через .get() с проверкой на None
-    nlp_parser = registry.get("nlp_parser")
-    categorizer = registry.get("categorizer")
-    
-    if not nlp_parser:
-        raise HTTPException(status_code=503, detail="NLP-парсер не загружен")
-    
-    # 1. Парсинг текста
-    parsed = nlp_parser.parse(data.text)   
-    
-    # 2. Категоризация (умная модель загружена)
-    category_id = None
-    if categorizer and parsed.get("description"):
-        cat_pred = categorize(parsed["description"])
-        db_cat = db.query(Category).filter(
-            Category.code == cat_pred.category_code,
-            Category.user_id == user.id
-        ).first()
-        category_id = db_cat.id if db_cat else None
-        if not category_id:
-            logger.warning(f"Category code {cat_pred.category_code} not found in DB")
-    
-    return {
-        "amount": parsed["amount"],
-        "description": parsed["description"],
-        "category_id": category_id,
-        "is_income": parsed["is_income"]
-    }
 
 class TransactionCreate(BaseModel):
     description: str = Field(..., min_length=1, max_length=500, description="Описание транзакции")
@@ -211,3 +175,40 @@ async def create_transaction(
             detail="Ошибка при создании: категория не принадлежит вам"
         )
     return tx
+
+@router.post("/smart-input")
+@limiter.limit("30/minute")
+async def smart_input(
+    request: Request,
+    data: SmartInputRequest,
+    db: Session = Depends(get_db), 
+    user: User = Depends(get_current_user)
+):
+    # Подключаем ML-модуль через .get() с проверкой на None
+    nlp_parser = registry.get("nlp_parser")
+    categorizer = registry.get("categorizer")
+    
+    if not nlp_parser:
+        raise HTTPException(status_code=503, detail="NLP-парсер не загружен")
+    
+    # 1. Парсинг текста
+    parsed = nlp_parser.parse(data.text)   
+    
+    # 2. Категоризация (умная модель загружена)
+    category_id = None
+    if categorizer and parsed.get("description"):
+        cat_pred = categorize(parsed["description"])
+        db_cat = db.query(Category).filter(
+            Category.code == cat_pred.category_code,
+            Category.user_id == user.id
+        ).first()
+        category_id = db_cat.id if db_cat else None
+        if not category_id:
+            logger.warning(f"Category code {cat_pred.category_code} not found in DB")
+    
+    return {
+        "amount": parsed["amount"],
+        "description": parsed["description"],
+        "category_id": category_id,
+        "is_income": parsed["is_income"]
+    }

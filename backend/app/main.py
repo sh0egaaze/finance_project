@@ -103,8 +103,8 @@ async def root():
 async def health():
     return {"status": "ok"}
 
-@app.exception_handler(SQLAlchemyAlchemyError)
-async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyAlchemyError):
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     logger.error(f"DB Error: {exc}")
     return JSONResponse(
         status_code=500,
