@@ -54,7 +54,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend/logs:/app/logs
-      - ./backend/app/ml/trained_models:/app/ml/trained_models:ro
+      - ./backend/app/ml/trained_models:/backend/app/ml/trained_models:ro
     restart: unless-stopped
 
   # Frontend (production build served by nginx)

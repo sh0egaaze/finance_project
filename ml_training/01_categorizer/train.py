@@ -28,8 +28,7 @@ DATA_PATH = os.path.join(BASE_DIR, "data", "transactions.csv")
 
 # Сохраняем в оба места: архив и бэкенд
 MODEL_DIRS = [
-    os.path.join(BASE_DIR, "trained_models", "rubert"),
-    os.path.join(PROJECT_DIR, "backend", "app", "ml", "trained_models", "rubert"),
+    os.path.join(PROJECT_DIR, "backend", "app", "ml", "trained_models", "categorizer"),
 ]
 
 

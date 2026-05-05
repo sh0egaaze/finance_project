@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+WORKDIR /backend
 
 # Установка только системных зависимостей
 RUN apt-get update && apt-get install -y \
@@ -18,7 +18,7 @@ COPY . .
 # Создание директорий
 RUN mkdir -p logs
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/backend
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
