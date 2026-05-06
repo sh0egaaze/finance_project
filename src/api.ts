@@ -66,22 +66,13 @@ export interface Category {
 }
 
 export interface Transaction {
-  id: number;
-  user_id: number;
-  amount: number;
-  currency: string;
-  description: string | null;
-  category_id: number | null;
-  category: Category | null;
-  category_confidence: number | null;
-  category_manual: boolean;
-  source: string;
-  external_id: string | null;
-  merchant_name: string | null;
-  is_suspicious: boolean;
-  suspicious_reason: string | null;
-  transaction_date: string;
-  created_at: string | null;
+    id: number;
+    description: string;
+    amount: number;
+    is_income: boolean;
+    category_id: number | null;
+    transaction_date: string | null;
+    created_at: string | null;
 }
 
 export interface TransactionList {
@@ -92,12 +83,11 @@ export interface TransactionList {
 }
 
 export interface TransactionCreate {
-  amount: number;
-  currency?: string;
-  description?: string;
-  category_id?: number;
-  source?: string;
-  transaction_date?: string;
+    amount: number;
+    description: string;
+    is_income: boolean;
+    category_id?: number;
+    transaction_date?: string;
 }
 
 export interface TransactionUpdate {
@@ -323,16 +313,22 @@ class ApiClient {
 
   // Transactions
   async getTransactions(params?: {
-    skip?: number;
+    offset?: number;
     limit?: number;
     category_id?: number;
     source?: string;
     is_suspicious?: boolean;
     search?: string;
-  }): Promise<TransactionList> {
+}): Promise<TransactionList> {
     const response = await axiosInstance.get('/transactions', { params });
-    return response.data;
-  }
+    const items = Array.isArray(response.data) ? response.data : (response.data.items || []);
+    return {
+        items,
+        total: items.length,
+        page: 1,
+        per_page: params?.limit || 20,
+    };
+}
 
   async getTransaction(id: number): Promise<Transaction> {
     const response = await axiosInstance.get(`/transactions/${id}`);

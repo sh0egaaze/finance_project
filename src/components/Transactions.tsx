@@ -47,6 +47,18 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
     }
   };
 
+  const getCategoryName = (categoryId: number | null) => {
+      if (!categoryId) return 'Без категории';
+      const cat = categories.find(c => c.id === categoryId);
+      return cat?.name || 'Без категории';
+  };
+
+  const getCategoryIcon = (categoryId: number | null) => {
+      if (!categoryId) return '•';
+      const cat = categories.find(c => c.id === categoryId);
+      return cat?.icon?.charAt(0).toUpperCase() || '•';
+  };
+
   const handleSyncTBank = async () => {
     setSyncing(true);
     setSyncMessage(null);
@@ -72,8 +84,9 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
     if (searchQuery && !tx.description?.toLowerCase().includes(searchQuery.toLowerCase())) {
       return false;
     }
-    if (selectedCategory && tx.category?.code !== selectedCategory) {
-      return false;
+    if (selectedCategory) {
+      const cat = categories.find(c => c.code === selectedCategory);
+      if (!cat || tx.category_id !== cat.id) return false;
     }
     if (selectedSource && tx.source !== selectedSource) {
       return false;
@@ -213,7 +226,7 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
                       <div>
                         <p className="font-medium text-gray-900">{tx.description || 'Без описания'}</p>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
-                          <span>{tx.category?.name || 'Без категории'}</span>
+                          <span>{getCategoryName(tx.category_id)}</span>
                           {tx.source === 'tbank_api' && (
                             <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">
                               Т-Банк
@@ -230,7 +243,7 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
                     
                     <div className="flex items-center gap-3">
                       <span className={`font-semibold ${Number(tx.amount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {Number(tx.amount) >= 0 ? '+' : ''}{Number(tx.amount).toLocaleString('ru-RU')} ₽
+                        {tx.is_income ? '+' : '-'}{Number(tx.amount).toLocaleString('ru-RU')} ₽
                       </span>
                       
                       <button
