@@ -48,8 +48,9 @@ export default function App() {
   const handleLogin = async (email: string, password: string) => {
     const result = await api.login(email, password);
     localStorage.setItem('token', result.access_token);
-    localStorage.setItem('user', JSON.stringify(result.user));
-    setUser(result.user);
+    const profile = await api.getMe();
+    localStorage.setItem('user', JSON.stringify(profile));
+    setUser(profile);
     setIsAuthenticated(true);
     
     // Load categories

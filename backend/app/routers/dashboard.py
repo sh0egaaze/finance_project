@@ -36,7 +36,7 @@ async def get_dashboard(
     month_ago = now - timedelta(days=30)
     
     # Получаем транзакции за месяц
-    transactions = db.query(Transaction)/options(
+    transactions = db.query(Transaction).options(
         joinedload(Transaction.category)
     ).filter(
         Transaction.user_id == current_user.id,
