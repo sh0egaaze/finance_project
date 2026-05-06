@@ -16,14 +16,12 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 class DashboardResponse(BaseModel):
-    total_balance: float
-    total_income: float
-    total_expense: float
-    savings_rate: float
-    transactions_count: int
+    stats: dict
     recent_transactions: List[dict]
     spending_by_category: List[dict]
+    monthly_trend: List[dict]
     upcoming_reminders: List[dict]
+    suspicious_transactions: List[dict]
 
 
 @router.get("", response_model=DashboardResponse)
@@ -104,14 +102,28 @@ async def get_dashboard(
         })
     
     return {
-        "total_balance": total_balance,
-        "total_income": total_income,
-        "total_expense": total_expense,
-        "savings_rate": savings_rate,
-        "transactions_count": len(transactions),
+        "stats": {
+            "total_balance": total_balance,
+            "total_income": total_income,
+            "total_expense": total_expense,
+            "savings_rate": savings_rate,
+            "transaction_count": len(transactions),
+        },
         "recent_transactions": recent_transactions,
-        "spending_by_category": spending_by_category,
+        "spending_by_category": [
+            {
+                "category_id": item["category_id"],
+                "category": item.get("category_name", "Другое"),
+                "name": item.get("category_name", "Другое"),
+                "amount": item["amount"],
+                "color": item.get("category_color", "#6B7280"),
+                "icon": item.get("category_icon", "📦"),
+            }
+            for item in spending_by_category
+        ],
+        "monthly_trend": [],
         "upcoming_reminders": upcoming_reminders,
+        "suspicious_transactions": [],
     }
 
 
