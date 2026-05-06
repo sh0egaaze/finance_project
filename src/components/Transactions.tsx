@@ -88,9 +88,6 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
       const cat = categories.find(c => c.code === selectedCategory);
       if (!cat || tx.category_id !== cat.id) return false;
     }
-    if (selectedSource && tx.source !== selectedSource) {
-      return false;
-    }
     return true;
   });
 
@@ -213,36 +210,19 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
                 {txs.map(tx => (
                   <div key={tx.id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
                     <div className="flex items-center gap-3">
-                      {tx.category && (
-                        <div
-                          className="w-10 h-10 rounded-full flex items-center justify-center"
-                          style={{ backgroundColor: (tx.category.color || '#6B7280') + '20' }}
-                        >
-                          <span style={{ color: tx.category.color || '#6B7280' }}>
-                            {tx.category.icon?.charAt(0).toUpperCase() || '•'}
-                          </span>
-                        </div>
-                      )}
+                        <span style={{ color: tx.category.color || '#6B7280' }}>
+                          {getCategoryIcon(tx.category_id)}
+                        </span>
                       <div>
                         <p className="font-medium text-gray-900">{tx.description || 'Без описания'}</p>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                           <span>{getCategoryName(tx.category_id)}</span>
-                          {tx.source === 'tbank_api' && (
-                            <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">
-                              Т-Банк
-                            </span>
-                          )}
-                          {tx.is_suspicious && (
-                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs">
-                              Подозрительная
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      <span className={`font-semibold ${Number(tx.amount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className={`font-semibold ${tx.is_income ? 'text-green-600' : 'text-red-600'}`}>
                         {tx.is_income ? '+' : '-'}{Number(tx.amount).toLocaleString('ru-RU')} ₽
                       </span>
                       
