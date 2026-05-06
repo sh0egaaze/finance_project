@@ -263,17 +263,33 @@ export interface SmartInputResult {
 class ApiClient {
   // Auth
   async register(email: string, password: string, fullName: string): Promise<User> {
-    const response = await axiosInstance.post('/auth/register', {
-      email,
-      password,
-      full_name: fullName,
-    });
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/auth/register', {
+        email,
+        password,
+        full_name: fullName,
+      });
+      return response.data;
+    } catch (error: any) {
+      const message = error.response?.data?.detail || error.message;
+      throw new Error(message);
+    }
   }
 
   async login(email: string, password: string): Promise<{ access_token: string; user: User }> {
-    const response = await axiosInstance.post('/auth/login', { email, password });
-    return response.data;
+    try {
+      const formData = new URLSearchParams();
+      formData.append('username', email);
+      formData.append('password', password);
+
+      const response = await axiosInstance.post('/auth/token', formData, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+      return response.data;
+    } catch (error: any) {
+      const message = error.response?.data?.detail || error.message;
+      throw new Error(message);
+    }
   }
 
   async getMe(): Promise<User> {

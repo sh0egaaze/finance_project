@@ -178,7 +178,7 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
     if existing:
         raise HTTPException(
             status_code=400,
-            detail="Если этот email свободен, регистрация выполнена"
+            detail="Пользователь с таким email уже зарегистрирован"
         )
 
     user = User(
