@@ -66,13 +66,13 @@ export interface Category {
 }
 
 export interface Transaction {
-    id: number;
-    description: string;
-    amount: number;
-    is_income: boolean;
-    category_id: number | null;
-    transaction_date: string | null;
-    created_at: string | null;
+  id: number;
+  description: string;
+  amount: number;
+  is_income: boolean;
+  category_id: number | null;
+  transaction_date: string | null;
+  created_at: string | null;
 }
 
 export interface TransactionList {
@@ -83,19 +83,19 @@ export interface TransactionList {
 }
 
 export interface TransactionCreate {
-    amount: number;
-    description: string;
-    is_income: boolean;
-    category_id?: number;
-    transaction_date?: string;
+  amount: number;
+  description: string;
+  is_income: boolean;
+  category_id?: number;
+  transaction_date?: string;
 }
 
 export interface TransactionUpdate {
   amount?: number;
   description?: string;
+  is_income?: boolean;
   category_id?: number;
   transaction_date?: string;
-  is_suspicious?: boolean;
 }
 
 export interface Reminder {

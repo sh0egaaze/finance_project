@@ -136,6 +136,10 @@ class Transaction(Base):
     user = relationship("User", back_populates="transactions")
     category = relationship("Category", back_populates="transactions")
 
+    @property
+    def is_income(self) -> bool:
+        return self.amount is not None and self.amount >= 0
+
     __table_args__ = (
         Index('ix_transactions_id', 'id'),
         Index('ix_transactions_user_id', 'user_id'),

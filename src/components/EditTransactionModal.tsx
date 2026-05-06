@@ -15,7 +15,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 }) => {
   const [description, setDescription] = useState(transaction.description || '');
   const [amount, setAmount] = useState(Math.abs(Number(transaction.amount)).toString());
-  const [isExpense, setIsExpense] = useState(Number(transaction.amount) < 0);
+  const [isExpense, setIsExpense] = useState(!transaction.is_income);
   const [categoryId, setCategoryId] = useState<number | null>(transaction.category_id);
   const [date, setDate] = useState(
     new Date(transaction.transaction_date).toISOString().slice(0, 16)
@@ -50,7 +50,8 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
       await api.updateTransaction(transaction.id, {
         description,
-        amount: isExpense ? -amountValue : amountValue,
+        amount: amountValue,
+        is_income: !isExpense,
         category_id: categoryId || undefined,
         transaction_date: new Date(date).toISOString(),
       });

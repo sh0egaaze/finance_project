@@ -30,8 +30,10 @@ class TransactionCreate(BaseModel):
 class TransactionUpdate(BaseModel):
     description: Optional[str] = Field(None, min_length=1, max_length=500)
     amount: Optional[Decimal] = Field(None, gt=0)
+    is_income: Optional[bool] = None
     category_id: Optional[int] = None
     category_manual: Optional[bool] = None
+    transaction_date: Optional[str] = None
 
 class TransactionResponse(BaseModel):
     id: int
@@ -87,6 +89,26 @@ async def update_transaction(
         raise HTTPException(status_code=404, detail="Транзакция не найдена")
 
     update_data = data.model_dump(exclude_unset=True)
+    
+    new_amount = update_data.pop('amount', None)
+    new_is_income = update_data.pop('is_income', None)
+    
+    if new_amount is not None:
+        if new_is_income is not None:
+            tx.amount = new_amount if new_is_income else -new_amount
+        else:
+            tx.amount = new_amount if tx.amount >= 0 else -new_amount
+    elif new_is_income is not None and tx.amount is not None:
+        tx.amount = abs(tx.amount) if new_is_income else -abs(tx.amount)
+    
+    new_date = update_data.pop('transaction_date', None)
+    if new_date:
+        try:
+            from datetime import datetime
+            tx.transaction_date = datetime.fromisoformat(new_date)
+        except ValueError:
+            pass
+    
     for field, value in update_data.items():
         setattr(tx, field, value)
 
@@ -96,7 +118,7 @@ async def update_transaction(
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail="Недопустимые данные: категория не принадлежит или неверный тип данных БД"
+            detail="Недопустимые данные"
         )
     return {"status": "updated"}
 
@@ -159,7 +181,7 @@ async def create_transaction(
     tx = Transaction(
         user_id=user.id,
         description=data.description,
-        amount=data.amount,
+        amount=data.amount if data.is_income else -data.amount,
         category_id=data.category_id,
         transaction_date=tx_date,
     )

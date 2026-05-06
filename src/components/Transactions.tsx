@@ -13,7 +13,6 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedSource, setSelectedSource] = useState<string>('');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -210,7 +209,7 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
                 {txs.map(tx => (
                   <div key={tx.id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
                     <div className="flex items-center gap-3">
-                        <span style={{ color: tx.category.color || '#6B7280' }}>
+                        <span style={{ color: categories.find(c => c.id === tx.category_id)?.color || '#6B7280' }}>
                           {getCategoryIcon(tx.category_id)}
                         </span>
                       <div>
