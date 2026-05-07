@@ -128,10 +128,12 @@ class FinanceParser:
         if match:
             try:
                 amt = float(match.group(1).replace(",", "."))
+                text_lower = text.lower()
+                text_words = text_lower.split()
                 if amt < 1000:
-                    if any(w in text_lower for w in ['тысяча', 'тысячи', 'тысяч', 'тыщу', 'тыщей', 'косарь', 'косаря', 'косарей', 'кес', 'к', 'штука', 'штуки', 'штук']):
+                    if any(w in text_words for w in ['тысяча', 'тысячи', 'тысяч', 'тыщу', 'тыщей', 'косарь', 'косаря', 'косарей', 'кес', 'к', 'штука', 'штуки', 'штук']):
                         return amt * 1000
-                    if any(w in text_lower for w in ['миллион', 'миллиона', 'миллионов', 'лям', 'ляма']):
+                    if any(w in text_words for w in ['миллион', 'миллиона', 'миллионов', 'лям', 'ляма']):
                         return amt * 1000000
                 return amt
             except: pass

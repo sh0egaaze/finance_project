@@ -5,9 +5,10 @@ import { api, User as UserType, TBankStatus } from '../api';
 interface SettingsProps {
   user: UserType;
   onLogout: () => void;
+  onUserUpdate?: (user: UserType) => void;
 }
 
-export default function Settings({ user, onLogout }: SettingsProps) {
+export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps) {
   const [fullName, setFullName] = useState(user.full_name || '');
   const [emailNotifications, setEmailNotifications] = useState(user.email_notifications);
   const [notificationEmail, setNotificationEmail] = useState(user.notification_email || '');
@@ -41,11 +42,14 @@ export default function Settings({ user, onLogout }: SettingsProps) {
     setIsSaving(true);
     setMessage(null);
     try {
-      await api.updateProfile({
+      const updatedUser = await api.updateProfile({
         full_name: fullName,
         email_notifications: emailNotifications,
         notification_email: notificationEmail || undefined,
       });
+      if (onUserUpdate) {
+        onUserUpdate(updatedUser);
+      }
       setMessage({ type: 'success', text: 'Профиль сохранён' });
     } catch (error) {
       setMessage({ type: 'error', text: 'Ошибка сохранения' });

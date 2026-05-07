@@ -132,7 +132,7 @@ export default function App() {
       case 'tips':
         return <SavingTips />;
       case 'settings':
-        return <Settings user={user} onLogout={handleLogout} />;
+        return <Settings user={user} onLogout={handleLogout} onUserUpdate={setUser} />;
       default:
         return null;
     }

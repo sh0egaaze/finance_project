@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # Тинькофф API
-    TBANK_API_URL: str = "https://business.tbank.ru/openapi"
+    TBANK_API_URL: str = "https://sandbox-invest-public-api.tinkoff.ru"
     TBANK_TOKEN: str = Field(..., env="TBANK_TOKEN")
     
     # Курсы валют API

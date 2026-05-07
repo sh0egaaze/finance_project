@@ -234,3 +234,56 @@ async def smart_input(
         "category_id": category_id,
         "is_income": parsed["is_income"]
     }
+
+@router.post("/smart-input/confirm", response_model=TransactionResponse, status_code=201)
+@limiter.limit("30/minute")
+async def smart_input_confirm(
+    request: Request,
+    data: SmartInputRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """Подтверждение быстрого ввода — парсит текст и создаёт транзакцию"""
+    nlp_parser = registry.get("nlp_parser")
+    categorizer = registry.get("categorizer")
+
+    if not nlp_parser:
+        raise HTTPException(status_code=503, detail="NLP-парсер не загружен")
+
+    # 1. Парсинг текста
+    parsed = nlp_parser.parse(data.text)
+
+    amount = parsed.get("amount")
+    description = parsed.get("description", data.text)
+    is_income = parsed.get("is_income", False)
+
+    if not amount or amount <= 0:
+        raise HTTPException(status_code=400, detail="Не удалось определить сумму из текста")
+
+    # 2. Категоризация
+    category_id = None
+    if categorizer and description:
+        cat_pred = categorize(description)
+        db_cat = db.query(Category).filter(
+            Category.code == cat_pred.category_code,
+        ).first()
+        category_id = db_cat.id if db_cat else None
+
+    # 3. Создание транзакции
+    tx = Transaction(
+        user_id=user.id,
+        description=description,
+        amount=amount if is_income else -amount,
+        category_id=category_id,
+        transaction_date=datetime.now(timezone.utc),
+    )
+
+    try:
+        db.add(tx)
+        db.commit()
+        db.refresh(tx)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Ошибка при создании транзакции")
+
+    return tx

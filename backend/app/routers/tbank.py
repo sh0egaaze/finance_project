@@ -58,7 +58,7 @@ class TBankConnectRequest(BaseModel):
     token: str = Field(
         ..., 
         min_length=3, 
-        max_length=200,
+        max_length=500,
         description="Т-Банк API токен"
     )
     
@@ -68,8 +68,6 @@ class TBankConnectRequest(BaseModel):
         v = v.strip()
         if not v.startswith("t."):
             raise ValueError("Токен должен начинаться с 't.'")
-        if not re.match(r'^t\.[a-zA-Z0-9_-]+$', v):
-            raise ValueError("Токен содержит недопустимые символы")
         return v
 
 
@@ -192,12 +190,6 @@ async def connect_tbank(
     current_user: User = Depends(get_current_user)
 ):
     """Подключение Т-Банка"""
-    if not data.token or not data.token.startswith("t."):
-        raise HTTPException(
-            status_code=400, 
-            detail="Некорректный формат токена. Токен должен начинаться с 't.'"
-        )
-    
     _s = get_settings()
     
     # Проверяем токен через T-Bank API
@@ -214,6 +206,7 @@ async def connect_tbank(
                 timeout=10
             )
             if resp.status_code != 200:
+                logger.error(f"T-Bank API rejected: status={resp.status_code}, body={resp.text[:500]}")
                 raise HTTPException(
                     status_code=400,
                     detail=f"Токен невалиден. T-Bank API вернул статус {resp.status_code}"

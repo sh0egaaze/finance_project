@@ -256,3 +256,33 @@ async def get_me(current_user: User = Depends(get_current_user)):
         email_notifications=current_user.email_notifications,
         tbank_connected=bool(current_user.tbank_token_encrypted),
     )
+
+class ProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    email_notifications: Optional[bool] = None
+    notification_email: Optional[str] = None
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_profile(
+    data: ProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Обновление профиля пользователя"""
+    update_data = data.model_dump(exclude_unset=True)
+    
+    for field, value in update_data.items():
+        setattr(current_user, field, value)
+
+    db.commit()
+    db.refresh(current_user)
+
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        is_active=current_user.is_active,
+        email_notifications=current_user.email_notifications,
+        tbank_connected=bool(current_user.tbank_token_encrypted),
+    )
