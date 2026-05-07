@@ -286,3 +286,42 @@ async def update_profile(
         email_notifications=current_user.email_notifications,
         tbank_connected=bool(current_user.tbank_token_encrypted),
     )
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 12:
+            raise ValueError("Пароль должен содержать не менее 12 символов")
+        if not any(char.isdigit() for char in v):
+            raise ValueError("Пароль должен содержать хотя бы одну цифру")
+        if not any(char.isupper() for char in v):
+            raise ValueError("Пароль должен содержать хотя бы одну заглавную букву")
+        if not any(char in "!@#$%^&*()-_+=" for char in v):
+            raise ValueError("Пароль должен содержать спецсимволы (!@#$%^*...)")
+        return v
+
+
+@router.post("/change-password")
+async def change_password(
+    data: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Смена пароля пользователя"""
+    # Проверяем текущий пароль
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Неверный текущий пароль"
+        )
+    
+    # Устанавливаем новый пароль
+    current_user.hashed_password = get_password_hash(data.new_password)
+    current_user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    
+    return {"message": "Пароль успешно изменён"}

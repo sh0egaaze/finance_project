@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Bell, Shield, Download, Link, Unlink, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
+import { User, Bell, Shield, Link, Unlink, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
 import { api, User as UserType, TBankStatus } from '../api';
 
 interface SettingsProps {
@@ -8,12 +8,30 @@ interface SettingsProps {
   onUserUpdate?: (user: UserType) => void;
 }
 
+// Компонент для отображения сообщения
+function Message({ message }: { message: { type: 'success' | 'error'; text: string } | null }) {
+  if (!message) return null;
+  return (
+    <div className={`p-4 rounded-lg flex items-center gap-2 mb-4 ${
+      message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+    }`}>
+      {message.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+      {message.text}
+    </div>
+  );
+}
+
 export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps) {
   const [fullName, setFullName] = useState(user.full_name || '');
   const [emailNotifications, setEmailNotifications] = useState(user.email_notifications);
   const [notificationEmail, setNotificationEmail] = useState(user.notification_email || '');
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  // Отдельные сообщения для каждого блока
+  const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [tbankMessage, setTbankMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [notifyMessage, setNotifyMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // T-Bank
   const [tbankStatus, setTbankStatus] = useState<TBankStatus | null>(null);
@@ -40,7 +58,7 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
-    setMessage(null);
+    setProfileMessage(null);
     try {
       const updatedUser = await api.updateProfile({
         full_name: fullName,
@@ -50,9 +68,28 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
       if (onUserUpdate) {
         onUserUpdate(updatedUser);
       }
-      setMessage({ type: 'success', text: 'Профиль сохранён' });
+      setProfileMessage({ type: 'success', text: 'Профиль сохранён' });
     } catch (error) {
-      setMessage({ type: 'error', text: 'Ошибка сохранения' });
+      setProfileMessage({ type: 'error', text: 'Ошибка сохранения' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveNotifications = async () => {
+    setIsSaving(true);
+    setNotifyMessage(null);
+    try {
+      const updatedUser = await api.updateProfile({
+        email_notifications: emailNotifications,
+        notification_email: notificationEmail || undefined,
+      });
+      if (onUserUpdate) {
+        onUserUpdate(updatedUser);
+      }
+      setNotifyMessage({ type: 'success', text: 'Настройки сохранены' });
+    } catch (error) {
+      setNotifyMessage({ type: 'error', text: 'Ошибка сохранения' });
     } finally {
       setIsSaving(false);
     }
@@ -60,24 +97,25 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
 
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
-      setMessage({ type: 'error', text: 'Пароли не совпадают' });
+      setPasswordMessage({ type: 'error', text: 'Пароли не совпадают' });
       return;
     }
-    if (newPassword.length < 6) {
-      setMessage({ type: 'error', text: 'Пароль должен быть минимум 6 символов' });
+    if (newPassword.length < 12) {
+      setPasswordMessage({ type: 'error', text: 'Пароль должен быть минимум 12 символов' });
       return;
     }
     
     setIsSaving(true);
-    setMessage(null);
+    setPasswordMessage(null);
     try {
       await api.changePassword(currentPassword, newPassword);
-      setMessage({ type: 'success', text: 'Пароль изменён' });
+      setPasswordMessage({ type: 'success', text: 'Пароль изменён' });
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch {
-      setMessage({ type: 'error', text: 'Неверный текущий пароль' });
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail || 'Неверный текущий пароль';
+      setPasswordMessage({ type: 'error', text: detail });
     } finally {
       setIsSaving(false);
     }
@@ -87,14 +125,14 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
     if (!tbankToken.trim()) return;
     
     setIsConnecting(true);
-    setMessage(null);
+    setTbankMessage(null);
     try {
       const status = await api.connectTBank(tbankToken);
       setTbankStatus(status);
       setTbankToken('');
-      setMessage({ type: 'success', text: 'Т-Банк подключён!' });
+      setTbankMessage({ type: 'success', text: 'Т-Банк подключён!' });
     } catch {
-      setMessage({ type: 'error', text: 'Ошибка подключения. Проверьте токен.' });
+      setTbankMessage({ type: 'error', text: 'Ошибка подключения. Проверьте токен.' });
     } finally {
       setIsConnecting(false);
     }
@@ -106,9 +144,9 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
     try {
       await api.disconnectTBank();
       setTbankStatus({ connected: false, account_id: null, balance: null, message: 'Т-Банк отключён' });
-      setMessage({ type: 'success', text: 'Т-Банк отключён' });
+      setTbankMessage({ type: 'success', text: 'Т-Банк отключён' });
     } catch {
-      setMessage({ type: 'error', text: 'Ошибка отключения' });
+      setTbankMessage({ type: 'error', text: 'Ошибка отключения' });
     }
   };
 
@@ -116,21 +154,14 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
     <div className="space-y-6 max-w-2xl">
       <h2 className="text-2xl font-bold text-gray-800">Настройки</h2>
 
-      {message && (
-        <div className={`p-4 rounded-lg flex items-center gap-2 ${
-          message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-        }`}>
-          {message.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-          {message.text}
-        </div>
-      )}
-
       {/* Profile */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <div className="flex items-center gap-3 mb-4">
           <User className="w-5 h-5 text-gray-400" />
           <h3 className="text-lg font-semibold text-gray-800">Профиль</h3>
         </div>
+        
+        <Message message={profileMessage} />
         
         <div className="space-y-4">
           <div>
@@ -168,6 +199,8 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
           <Link className="w-5 h-5 text-gray-400" />
           <h3 className="text-lg font-semibold text-gray-800">Т-Банк</h3>
         </div>
+
+        <Message message={tbankMessage} />
 
         {tbankStatus?.connected ? (
           <div className="space-y-4">
@@ -233,6 +266,8 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
           <h3 className="text-lg font-semibold text-gray-800">Уведомления</h3>
         </div>
         
+        <Message message={notifyMessage} />
+        
         <div className="space-y-4">
           <label className="flex items-center gap-3 cursor-pointer">
             <input
@@ -256,7 +291,7 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
             </div>
           )}
           <button
-            onClick={handleSaveProfile}
+            onClick={handleSaveNotifications}
             disabled={isSaving}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
@@ -271,6 +306,8 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
           <Shield className="w-5 h-5 text-gray-400" />
           <h3 className="text-lg font-semibold text-gray-800">Безопасность</h3>
         </div>
+        
+        <Message message={passwordMessage} />
         
         <div className="space-y-4">
           <div>
@@ -290,6 +327,9 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
               onChange={(e) => setNewPassword(e.target.value)}
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              Минимум 12 символов, цифра, заглавная буква и спецсимвол
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Подтверждение пароля</label>
@@ -308,21 +348,6 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
             Сменить пароль
           </button>
         </div>
-      </div>
-
-      {/* Export */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Download className="w-5 h-5 text-gray-400" />
-          <h3 className="text-lg font-semibold text-gray-800">Экспорт данных</h3>
-        </div>
-        
-        <p className="text-gray-500 text-sm mb-4">
-          Скачайте все ваши транзакции в формате CSV
-        </p>
-        <button className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors">
-          Скачать CSV
-        </button>
       </div>
 
       {/* Logout */}
