@@ -199,8 +199,10 @@ async def connect_tbank(
             "Content-Type": "application/json"
         }
         async with httpx.AsyncClient() as client:
+            url = f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts"
+            logger.info(f"Connecting to T-Bank API: {url}")
             resp = await client.post(
-                f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
+                url,
                 headers=headers,
                 json={},
                 timeout=10

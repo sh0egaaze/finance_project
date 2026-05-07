@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # Т-Банк API
-    TBANK_API_URL: str = "https://sandbox-invest-public-api.tbank.ru/rest"
+    TBANK_API_URL: str = "https://invest-public-api.tbank.ru/rest"
     TBANK_TOKEN: str = Field(..., env="TBANK_TOKEN")
     
     # Курсы валют API
