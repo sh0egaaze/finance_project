@@ -19,7 +19,7 @@ class TBankService:
     Получает информацию о счетах и портфеле из песочницы.
     """
     
-    SANDBOX_URL = "https://sandbox-invest-public-api.tbank.ru/rest"
+    SANDBOX_URL = "https://sandbox-invest-public-api.tinkoff.ru/rest"
     
     def __init__(self, token: str):
         self.token = token

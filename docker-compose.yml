@@ -33,7 +33,7 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
-      TBANK_API_URL: https://business.tbank.ru/openapi
+      TBANK_API_URL: https://sandbox-invest-public-api.tinkoff.ru/rest
       TBANK_TOKEN: ${TBANK_TOKEN:-}
       TBANK_ENCRYPTION_KEY: ${TBANK_ENCRYPTION_KEY}
       TBANK_SANDBOX: ${TBANK_SANDBOX:-true}
