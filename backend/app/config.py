@@ -58,8 +58,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # Тинькофф API
-    TBANK_API_URL: str = "https://sandbox-invest-public-api.tinkoff.ru"
+    # Т-Банк API
+    TBANK_API_URL: str = "https://sandbox-invest-public-api.tbank.ru/rest"
     TBANK_TOKEN: str = Field(..., env="TBANK_TOKEN")
     
     # Курсы валют API

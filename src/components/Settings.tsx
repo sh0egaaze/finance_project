@@ -105,7 +105,7 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
     
     try {
       await api.disconnectTBank();
-      setTbankStatus({ connected: false, account_id: null, balance: null, currency: 'RUB', last_sync: null, accounts_count: 0 });
+      setTbankStatus({ connected: false, account_id: null, balance: null, message: 'Т-Банк отключён' });
       setMessage({ type: 'success', text: 'Т-Банк отключён' });
     } catch {
       setMessage({ type: 'error', text: 'Ошибка отключения' });
@@ -177,7 +177,7 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
             </div>
             {tbankStatus.balance !== null && (
               <p className="text-gray-600">
-                Баланс: {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: tbankStatus.currency }).format(tbankStatus.balance)}
+                Баланс: {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: tbankStatus.currency || 'RUB' }).format(tbankStatus.balance)}
               </p>
             )}
             {tbankStatus.last_sync && (
@@ -209,8 +209,8 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
               />
               <p className="text-xs text-gray-400 mt-1">
                 Получите токен на{' '}
-                <a href="https://www.tinkoff.ru/invest/settings/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                  tinkoff.ru/invest/settings
+                <a href="https://www.tbank.ru/invest/settings/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                  tbank.ru/invest/settings
                 </a>
               </p>
             </div>

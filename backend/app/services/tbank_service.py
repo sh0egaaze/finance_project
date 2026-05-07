@@ -1,6 +1,6 @@
 """
 Сервис интеграции с Т-Банк Sandbox API (Invest API)
-Документация: https://tinkoff.github.io/investAPI/
+Документация: https://tbank.github.io/investAPI/
 """
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, timezone
@@ -19,7 +19,7 @@ class TBankService:
     Получает информацию о счетах и портфеле из песочницы.
     """
     
-    SANDBOX_URL = "https://sandbox-invest-public-api.tinkoff.ru/rest"
+    SANDBOX_URL = "https://sandbox-invest-public-api.tbank.ru/rest"
     
     def __init__(self, token: str):
         self.token = token

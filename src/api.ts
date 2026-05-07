@@ -240,9 +240,10 @@ export interface TBankStatus {
   connected: boolean;
   account_id: string | null;
   balance: number | null;
-  currency: string;
-  last_sync: string | null;
-  accounts_count: number;
+  message: string;
+  currency?: string;
+  last_sync?: string | null;
+  accounts_count?: number;
 }
 
 export interface SmartInputResult {

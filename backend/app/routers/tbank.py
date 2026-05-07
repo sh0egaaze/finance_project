@@ -129,7 +129,7 @@ async def get_tbank_status(
         }
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
+                f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
                 headers=headers,
                 json={},
                 timeout=10
@@ -200,7 +200,7 @@ async def connect_tbank(
         }
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
+                f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
                 headers=headers,
                 json={},
                 timeout=10
@@ -301,7 +301,7 @@ async def sync_tbank(
         async with httpx.AsyncClient() as client:
             # Проверяем наличие аккаунтов
             accounts_response = await client.post(
-                f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
+                f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
                 headers=headers,
                 json={},
                 timeout=10
@@ -320,7 +320,7 @@ async def sync_tbank(
             # Если аккаунтов нет, создаём
             if not accounts:
                 create_response = await client.post(
-                    f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/OpenSandboxAccount",
+                    f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.SandboxService/OpenSandboxAccount",
                     headers=headers,
                     json={},
                     timeout=10
@@ -339,7 +339,7 @@ async def sync_tbank(
             now = datetime.now(timezone.utc)
             from_date = now - timedelta(days=30)
             operations_response = await client.post(
-                f"{_s.TBANK_API_URL}/rest/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxOperations",
+                f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxOperations",
                 headers=headers,
                 json={
                     "accountId": account_id,
