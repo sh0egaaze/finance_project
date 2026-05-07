@@ -43,6 +43,7 @@ class TransactionResponse(BaseModel):
     category_id: Optional[int]
     transaction_date: Optional[datetime]
     created_at: datetime
+    source: Optional[str] = None
     
     class Config:
         from_attributes = True

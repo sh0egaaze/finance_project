@@ -21,37 +21,106 @@ logger = logging.getLogger(__name__)
 
 # Метаинформация о валютах
 CURRENCY_INFO = {
+    # Основные мировые
     "USD": {"name": "Доллар США", "flag": "🇺🇸"},
     "EUR": {"name": "Евро", "flag": "🇪🇺"},
     "GBP": {"name": "Фунт стерлингов", "flag": "🇬🇧"},
-    "CNY": {"name": "Китайский юань", "flag": "🇨🇳"},
+    "CHF": {"name": "Швейцарский франк", "flag": "🇨🇭"},
     "JPY": {"name": "Японская иена", "flag": "🇯🇵"},
-    "TRY": {"name": "Турецкая лира", "flag": "🇹🇷"},
+    
+    # Азия
+    "CNY": {"name": "Китайский юань", "flag": "🇨🇳"},
+    "HKD": {"name": "Гонконгский доллар", "flag": "🇭🇰"},
+    "SGD": {"name": "Сингапурский доллар", "flag": "🇸🇬"},
+    "KRW": {"name": "Южнокорейская вона", "flag": "🇰🇷"},
+    "INR": {"name": "Индийская рупия", "flag": "🇮🇳"},
+    "THB": {"name": "Тайский бат", "flag": "🇹🇭"},
+    "VND": {"name": "Вьетнамский донг", "flag": "🇻🇳"},
+    "IDR": {"name": "Индонезийская рупия", "flag": "🇮🇩"},
+    "MYR": {"name": "Малайзийский ринггит", "flag": "🇲🇾"},
+    "PHP": {"name": "Филиппинское песо", "flag": "🇵🇭"},
+    
+    # СНГ и соседи
     "KZT": {"name": "Казахстанский тенге", "flag": "🇰🇿"},
     "BYN": {"name": "Белорусский рубль", "flag": "🇧🇾"},
-    "CHF": {"name": "Швейцарский франк", "flag": "🇨🇭"},
+    "UAH": {"name": "Украинская гривна", "flag": "🇺🇦"},
+    "UZS": {"name": "Узбекский сум", "flag": "🇺🇿"},
+    "GEL": {"name": "Грузинский лари", "flag": "🇬🇪"},
+    "AMD": {"name": "Армянский драм", "flag": "🇦🇲"},
+    "AZN": {"name": "Азербайджанский манат", "flag": "🇦🇿"},
+    "MDL": {"name": "Молдавский лей", "flag": "🇲🇩"},
+    "KGS": {"name": "Киргизский сом", "flag": "🇰🇬"},
+    "TJS": {"name": "Таджикский сомони", "flag": "🇹🇯"},
+    
+    # Ближний Восток
+    "TRY": {"name": "Турецкая лира", "flag": "🇹🇷"},
     "AED": {"name": "Дирхам ОАЭ", "flag": "🇦🇪"},
+    "SAR": {"name": "Саудовский риял", "flag": "🇸🇦"},
+    "ILS": {"name": "Израильский шекель", "flag": "🇮🇱"},
+    "QAR": {"name": "Катарский риал", "flag": "🇶🇦"},
+    "KWD": {"name": "Кувейтский динар", "flag": "🇰🇼"},
+    "BHD": {"name": "Бахрейнский динар", "flag": "🇧🇭"},
+    "OMR": {"name": "Оманский риал", "flag": "🇴🇲"},
+    "EGP": {"name": "Египетский фунт", "flag": "🇪🇬"},
+    
+    # Америка
+    "CAD": {"name": "Канадский доллар", "flag": "🇨🇦"},
+    "MXN": {"name": "Мексиканское песо", "flag": "🇲🇽"},
+    "BRL": {"name": "Бразильский реал", "flag": "🇧🇷"},
+    "ARS": {"name": "Аргентинское песо", "flag": "🇦🇷"},
+    "CLP": {"name": "Чилийское песо", "flag": "🇨🇱"},
+    "COP": {"name": "Колумбийское песо", "flag": "🇨🇴"},
+    "PEN": {"name": "Перуанский соль", "flag": "🇵🇪"},
+    
+    # Европа
+    "PLN": {"name": "Польский злотый", "flag": "🇵🇱"},
+    "CZK": {"name": "Чешская крона", "flag": "🇨🇿"},
+    "HUF": {"name": "Венгерский форинт", "flag": "🇭🇺"},
+    "RON": {"name": "Румынский лей", "flag": "🇷🇴"},
+    "BGN": {"name": "Болгарский лев", "flag": "🇧🇬"},
+    "HRK": {"name": "Хорватская куна", "flag": "🇭🇷"},
+    "RSD": {"name": "Сербский динар", "flag": "🇷🇸"},
+    "SEK": {"name": "Шведская крона", "flag": "🇸🇪"},
+    "NOK": {"name": "Норвежская крона", "flag": "🇳🇴"},
+    "DKK": {"name": "Датская крона", "flag": "🇩🇰"},
+    "ISK": {"name": "Исландская крона", "flag": "🇮🇸"},
+    
+    # Океания и Африка
+    "AUD": {"name": "Австралийский доллар", "flag": "🇦🇺"},
+    "NZD": {"name": "Новозеландский доллар", "flag": "🇳🇿"},
+    "ZAR": {"name": "Южноафриканский рэнд", "flag": "🇿🇦"},
+    "NGN": {"name": "Нигерийская найра", "flag": "🇳🇬"},
+    "MAD": {"name": "Марокканский дирхам", "flag": "🇲🇦"},
 }
 
-# Основные валюты для отображения
-MAIN_CURRENCIES = ["USD", "EUR", "CNY", "GBP", "TRY", "KZT"]
+# Валюты для отображения (можно регулировать)
+MAIN_CURRENCIES = [
+    # Топ мировые
+    "USD", "EUR", "GBP", "CHF", "JPY",
+    # Азия
+    "CNY", "HKD", "SGD", "KRW", "INR", "THB",
+    # СНГ
+    "KZT", "BYN", "UAH", "UZS", "GEL", "AMD", "AZN",
+    # Ближний Восток
+    "TRY", "AED", "SAR", "ILS",
+    # Америка
+    "CAD", "MXN", "BRL",
+    # Европа
+    "PLN", "CZK", "SEK", "NOK", "DKK",
+    # Океания
+    "AUD", "NZD",
+]
 
 
 async def fetch_rates_from_api() -> Optional[dict]:
     """Получить курсы из внешнего API"""
     settings = get_settings()
     
-    # exchangerate-api.com (бесплатный тариф)
-    # Формат: https://v6.exchangerate-api.com/v6/YOUR_API_KEY/latest/RUB
-    # Или бесплатный без ключа: https://api.exchangerate-api.com/v4/latest/RUB
-    
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # Пробуем с ключом
             if settings.CURRENCY_API_KEY:
                 url = f"https://v6.exchangerate-api.com/v6/{settings.CURRENCY_API_KEY}/latest/RUB"
             else:
-                # Бесплатный вариант без ключа
                 url = "https://api.exchangerate-api.com/v4/latest/RUB"
             
             response = await client.get(url)
@@ -68,64 +137,47 @@ async def fetch_rates_from_api() -> Optional[dict]:
 
 
 def save_rates_to_db(db: Session, api_data: dict) -> None:
-    """Сохранить курсы в БД"""
+    """Сохранить курсы в БД (добавляем новые записи, не перезаписываем)"""
     now = datetime.now(timezone.utc)
     rates = api_data.get("rates") or api_data.get("conversion_rates", {})
     
     for currency in MAIN_CURRENCIES:
         if currency in rates:
-            # API возвращает сколько единиц валюты за 1 RUB
-            # Нам нужно: сколько RUB за 1 единицу валюты
             rate_from_api = rates[currency]
             if rate_from_api > 0:
                 rate_value = 1 / rate_from_api
             else:
                 continue
             
-            # Проверяем, есть ли уже запись за сегодня
-            existing = db.query(CurrencyRate).filter(
-                CurrencyRate.base_currency == "RUB",
-                CurrencyRate.target_currency == currency,
-                CurrencyRate.rate_date >= now.replace(hour=0, minute=0, second=0, microsecond=0)
-            ).first()
-            
-            if existing:
-                existing.rate = Decimal(str(round(rate_value, 6)))
-                existing.rate_date = now
-            else:
-                new_rate = CurrencyRate(
-                    base_currency="RUB",
-                    target_currency=currency,
-                    rate=Decimal(str(round(rate_value, 6))),
-                    rate_date=now,
-                    source="exchangerate-api.com"
-                )
-                db.add(new_rate)
+            new_rate = CurrencyRate(
+                base_currency="RUB",
+                target_currency=currency,
+                rate=Decimal(str(round(rate_value, 6))),
+                rate_date=now,
+                source="exchangerate-api.com"
+            )
+            db.add(new_rate)
     
+    db.commit()
+    
+    # Удаляем старые записи (оставляем только за последние 7 дней)
+    week_ago = now - timedelta(days=7)
+    db.query(CurrencyRate).filter(CurrencyRate.rate_date < week_ago).delete()
     db.commit()
 
 
-def get_rate_change(db: Session, currency: str) -> float:
-    """Получить изменение курса за день"""
-    now = datetime.now(timezone.utc)
-    yesterday = now - timedelta(days=1)
-    
-    # Текущий курс
-    current = db.query(CurrencyRate).filter(
+def get_rate_change(db: Session, currency: str, current_rate: float) -> float:
+    """Получить изменение курса по сравнению с предыдущей записью"""
+    records = db.query(CurrencyRate).filter(
         CurrencyRate.base_currency == "RUB",
         CurrencyRate.target_currency == currency
-    ).order_by(desc(CurrencyRate.rate_date)).first()
+    ).order_by(desc(CurrencyRate.rate_date)).limit(2).all()
     
-    # Вчерашний курс
-    old = db.query(CurrencyRate).filter(
-        CurrencyRate.base_currency == "RUB",
-        CurrencyRate.target_currency == currency,
-        CurrencyRate.rate_date < now.replace(hour=0, minute=0, second=0)
-    ).order_by(desc(CurrencyRate.rate_date)).first()
-    
-    if current and old and old.rate > 0:
-        change = ((float(current.rate) - float(old.rate)) / float(old.rate)) * 100
-        return round(change, 2)
+    if len(records) >= 2:
+        previous_rate = float(records[1].rate)
+        if previous_rate > 0:
+            change = ((current_rate - previous_rate) / previous_rate) * 100
+            return round(change, 2)
     
     return 0.0
 
@@ -135,21 +187,23 @@ async def get_rates(db: Session = Depends(get_db)):
     """Получить актуальные курсы валют"""
     now = datetime.now(timezone.utc)
     
-    # Проверяем, когда последний раз обновляли курсы
     latest = db.query(CurrencyRate).order_by(desc(CurrencyRate.rate_date)).first()
     
-    # Если курсов нет или они старше 1 часа — обновляем из API
-    need_update = (
-        not latest or 
-        (now - latest.rate_date.replace(tzinfo=timezone.utc)) > timedelta(hours=1)
-    )
+    need_update = False
+    if not latest:
+        need_update = True
+    else:
+        latest_date = latest.rate_date
+        if latest_date.tzinfo is None:
+            latest_date = latest_date.replace(tzinfo=timezone.utc)
+        if (now - latest_date) > timedelta(hours=1):
+            need_update = True
     
     if need_update:
         api_data = await fetch_rates_from_api()
         if api_data:
             save_rates_to_db(db, api_data)
     
-    # Получаем курсы из БД
     rates_list = []
     for currency in MAIN_CURRENCIES:
         rate_record = db.query(CurrencyRate).filter(
@@ -159,23 +213,21 @@ async def get_rates(db: Session = Depends(get_db)):
         
         if rate_record:
             info = CURRENCY_INFO.get(currency, {"name": currency, "flag": "🏳️"})
-            change = get_rate_change(db, currency)
+            current_rate = round(float(rate_record.rate), 2)
+            change = get_rate_change(db, currency, current_rate)
             
             rates_list.append({
                 "currency": currency,
-                "rate": round(float(rate_record.rate), 2),
+                "rate": current_rate,
                 "change": change,
                 "name": info["name"],
                 "flag": info["flag"],
             })
     
-    # Если БД пустая — вернём fallback
     if not rates_list:
         rates_list = [
             {"currency": "USD", "rate": 92.50, "change": 0.0, "name": "Доллар США", "flag": "🇺🇸"},
             {"currency": "EUR", "rate": 100.20, "change": 0.0, "name": "Евро", "flag": "🇪🇺"},
-            {"currency": "CNY", "rate": 12.80, "change": 0.0, "name": "Китайский юань", "flag": "🇨🇳"},
-            {"currency": "GBP", "rate": 117.30, "change": 0.0, "name": "Фунт стерлингов", "flag": "🇬🇧"},
         ]
     
     return {
@@ -199,7 +251,6 @@ async def convert_currency(data: ConvertRequest, db: Session = Depends(get_db)):
     to_currency = data.to_currency.upper()
 
     def get_rub_rate(currency: str) -> float:
-        """Получить курс к рублю (сколько рублей за 1 единицу)"""
         if currency == "RUB":
             return 1.0
         
@@ -211,14 +262,11 @@ async def convert_currency(data: ConvertRequest, db: Session = Depends(get_db)):
         if rate_record:
             return float(rate_record.rate)
         
-        # Fallback
-        fallback = {"USD": 92.5, "EUR": 100.2, "CNY": 12.8, "GBP": 117.3}
-        return fallback.get(currency, 1.0)
+        return 1.0
 
     from_rate = get_rub_rate(from_currency)
     to_rate = get_rub_rate(to_currency)
 
-    # Конвертируем: сначала в рубли, потом в целевую валюту
     amount_in_rub = amount * from_rate
     converted = amount_in_rub / to_rate
 

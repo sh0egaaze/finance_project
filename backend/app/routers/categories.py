@@ -43,31 +43,27 @@ class CategoryCreate(BaseModel):
 
 # ===== Эндпоинты =====
 @router.get("", response_model=List[CategoryResponse])
-async def get_categories(db: Session = Depends(get_db)):
-    """Получить все категории"""
-    # Создаём дефолтные категории если их нет
-    existing = db.query(Category).count()
-    if existing == 0:
-        default_categories = [
-            {"code": "food", "name": "Еда", "name_en": "Food", "icon": "🍔", "color": "#FF6B6B", "is_expense": True, "keywords": "еда,продукты,кафе,ресторан,кофе,обед,завтрак,ужин,магазин"},
-            {"code": "transport", "name": "Транспорт", "name_en": "Transport", "icon": "🚗", "color": "#4ECDC4", "is_expense": True, "keywords": "такси,метро,автобус,бензин,транспорт"},
-            {"code": "entertainment", "name": "Развлечения", "name_en": "Entertainment", "icon": "🎬", "color": "#45B7D1", "is_expense": True, "keywords": "кино,театр,концерт,развлечения"},
-            {"code": "shopping", "name": "Покупки", "name_en": "Shopping", "icon": "🛍️", "color": "#96CEB4", "is_expense": True, "keywords": "покупки,одежда,магазин"},
-            {"code": "utilities", "name": "ЖКХ", "name_en": "Utilities", "icon": "🏠", "color": "#FFEAA7", "is_expense": True, "keywords": "жкх,коммуналка,квартира"},
-            {"code": "health", "name": "Здоровье", "name_en": "Health", "icon": "💊", "color": "#DDA0DD", "is_expense": True, "keywords": "аптека,врач,больница,здоровье"},
-            {"code": "education", "name": "Образование", "name_en": "Education", "icon": "📚", "color": "#87CEEB", "is_expense": True, "keywords": "образование,курсы,книги"},
-            {"code": "subscriptions", "name": "Подписки", "name_en": "Subscriptions", "icon": "📱", "color": "#98D8C8", "is_expense": True, "keywords": "подписка,netflix,spotify"},
-            {"code": "salary", "name": "Зарплата", "name_en": "Salary", "icon": "💰", "color": "#2ECC71", "is_income": True, "keywords": "зарплата,аванс,премия"},
-            {"code": "other_income", "name": "Другой доход", "name_en": "Other Income", "icon": "💵", "color": "#27AE60", "is_income": True, "keywords": "доход,перевод"},
-            {"code": "other", "name": "Другое", "name_en": "Other", "icon": "📦", "color": "#95A5A6", "is_expense": True, "keywords": ""},
-        ]
-        for cat_data in default_categories:
-            cat = Category(**cat_data, is_system=True, is_active=True)
-            db.add(cat)
-        db.commit()
+async def get_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Получить категории пользователя"""
+    # Получаем категории пользователя
+    categories = db.query(Category).filter(
+        Category.is_active == True,
+        (Category.user_id == current_user.id) | (Category.user_id == None)
+    ).all()
     
-    categories = db.query(Category).filter(Category.is_active == True).all()
-    return categories
+    # Убираем дубликаты по коду (приоритет у пользовательских)
+    seen_codes = {}
+    for cat in categories:
+        if cat.code not in seen_codes:
+            seen_codes[cat.code] = cat
+        elif cat.user_id == current_user.id:
+            # Пользовательская категория имеет приоритет
+            seen_codes[cat.code] = cat
+    
+    return list(seen_codes.values())
 
 
 @router.get("/{category_id}", response_model=CategoryResponse)

@@ -73,6 +73,7 @@ export interface Transaction {
   category_id: number | null;
   transaction_date: string | null;
   created_at: string | null;
+  source?: string;
 }
 
 export interface TransactionList {

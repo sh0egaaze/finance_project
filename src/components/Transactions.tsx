@@ -13,6 +13,7 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedSource, setSelectedSource] = useState<string>('');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -55,7 +56,7 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
   const getCategoryIcon = (categoryId: number | null) => {
       if (!categoryId) return '•';
       const cat = categories.find(c => c.id === categoryId);
-      return cat?.icon?.charAt(0).toUpperCase() || '•';
+      return cat?.icon || '•';
   };
 
   const handleSyncTBank = async () => {
@@ -87,12 +88,17 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
       const cat = categories.find(c => c.code === selectedCategory);
       if (!cat || tx.category_id !== cat.id) return false;
     }
+    if (selectedSource) {
+      if (!tx.source || tx.source !== selectedSource) return false;
+    }
     return true;
   });
 
   // Группировка по дате
   const groupedTransactions = filteredTransactions.reduce((acc, tx) => {
-    const date = new Date(tx.transaction_date).toLocaleDateString('ru-RU');
+    const date = tx.transaction_date 
+      ? new Date(tx.transaction_date).toLocaleDateString('ru-RU')
+      : 'Без даты';
     if (!acc[date]) acc[date] = [];
     acc[date].push(tx);
     return acc;
@@ -222,7 +228,7 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
                     
                     <div className="flex items-center gap-3">
                       <span className={`font-semibold ${tx.is_income ? 'text-green-600' : 'text-red-600'}`}>
-                        {tx.is_income ? '+' : '-'}{Number(tx.amount).toLocaleString('ru-RU')} ₽
+                        {tx.is_income ? '+' : '-'}{Math.abs(Number(tx.amount)).toLocaleString('ru-RU')} ₽
                       </span>
                       
                       <button

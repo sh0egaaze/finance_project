@@ -146,7 +146,7 @@ async def get_tbank_status(
                 accounts = data.get("accounts", [])
                 if accounts:
                     balance = accounts[0].get("balance", {}).get("value")
-                    account_id = accounts[0].get("accountId")
+                    account_id = accounts[0].get("id") or accounts[0].get("accountId")
                     return {
                         "connected": True,
                         "account_id": account_id,
@@ -333,13 +333,13 @@ async def sync_tbank(
                         detail="T-Bank API временно недоступен. Попробуйте позже."
                     )
             else:
-                account_id = accounts[0].get("accountId")
+                account_id = accounts[0].get("id") or accounts[0].get("accountId")
             
             # Получаем операции за последние 30 дней
             now = datetime.now(timezone.utc)
             from_date = now - timedelta(days=30)
             operations_response = await client.post(
-                f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxOperations",
+                f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.OperationsService/GetOperations",
                 headers=headers,
                 json={
                     "accountId": account_id,
