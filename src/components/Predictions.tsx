@@ -32,18 +32,7 @@ export default function Predictions() {
       } catch (err) {
         console.error('Error loading predictions:', err);
         setError('Не удалось загрузить прогнозы');
-        // Use fallback data
-        setData({
-          next_month_total: 0,
-          next_month_expense: 45000,
-          next_month_income: 85000,
-          by_category: [],
-          trends: [],
-          recommendations: [
-            'Добавьте больше транзакций для точных прогнозов',
-            'Отслеживайте расходы ежедневно',
-          ],
-        });
+        setData(null);
       } finally {
         setIsLoading(false);
       }
