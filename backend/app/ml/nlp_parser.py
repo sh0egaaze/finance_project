@@ -52,24 +52,34 @@ RUS_NUMBERS = {
 
 class FinanceParser:
     def __init__(self, model_dir: str):
+        print("      nlp_parser: init start", flush=True)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"      nlp_parser: device={self.device}", flush=True)
+        
         checkpoint_path = os.path.join(model_dir, "checkpoint.pt")
         tokenizer_path = os.path.join(model_dir, "tokenizer")
         
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        print(f"      nlp_parser: loading tokenizer from {tokenizer_path}", flush=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, local_files_only=True)
+        print("      nlp_parser: tokenizer loaded", flush=True)
+        
+        print(f"      nlp_parser: loading checkpoint from {checkpoint_path}", flush=True)
         checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+        print("      nlp_parser: checkpoint loaded", flush=True)
         
         conf = checkpoint["config"]
+        print(f"      nlp_parser: creating FinanceNLPModel with {conf['pretrained_model_name']}", flush=True)
         self.model = FinanceNLPModel(conf["pretrained_model_name"], conf["num_bio_labels"])
+        print("      nlp_parser: model created", flush=True)
+        
+        print("      nlp_parser: loading state_dict", flush=True)
         self.model.load_state_dict(checkpoint["model_state_dict"])
+        print("      nlp_parser: moving to device", flush=True)
         self.model.to(self.device)
         self.model.eval()
         self.max_length = conf["max_seq_length"]
         
-        # Список всех эталонных слов для коррекции опечаток
-        self.vocab_words = list(RUS_NUMBERS.keys())
-        
-        self._typo_cache: dict[str, str | None] = {}
+        print("      nlp_parser: init complete!", flush=True)
 
     def _fix_typos(self, word: str):
         """Исправляет опечатки в словах-числах (с кэшированием)"""
