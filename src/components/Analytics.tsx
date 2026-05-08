@@ -108,17 +108,23 @@ export default function Analytics() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <p className="text-gray-500 text-sm">Всего расходов</p>
-          <p className="text-2xl font-bold text-gray-800">
+          <p className="text-gray-500 text-sm">Доходы</p>
+          <p className="text-2xl font-bold text-green-600">
+            {formatCurrency(data.total_income || 0)}
+          </p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <p className="text-gray-500 text-sm">Расходы</p>
+          <p className="text-2xl font-bold text-red-600">
             {formatCurrency(totalSpending)}
           </p>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <p className="text-gray-500 text-sm">Средний расход в день</p>
-          <p className="text-2xl font-bold text-gray-800">
-            {formatCurrency(data.average_transaction || totalSpending / 30)}
+          <p className="text-gray-500 text-sm">Баланс</p>
+          <p className={`text-2xl font-bold ${(data.total_income || 0) - totalSpending >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+            {formatCurrency((data.total_income || 0) - totalSpending)}
           </p>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-6">
