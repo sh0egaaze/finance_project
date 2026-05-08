@@ -231,12 +231,12 @@ async def get_predictions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Прогнозы расходов на следующий месяц с ML-рекомендациями"""
+    """Прогнозы расходов на следующий месяц"""
     from app.ml.model_loader import registry
+    import logging
+    logger = logging.getLogger(__name__)
     
     now = datetime.now(timezone.utc)
-    
-    # Берём данные за последние 90 дней для прогноза
     start_date = now - timedelta(days=90)
     
     transactions = db.query(Transaction).options(
@@ -253,154 +253,338 @@ async def get_predictions(
             "next_month_income": 0,
             "by_category": [],
             "trends": [],
-            "recommendations": [
-                "Добавьте больше транзакций для точных прогнозов",
-            ],
+            "recommendations": ["Добавьте транзакции для получения прогнозов"],
         }
     
-    # Считаем средние за месяц
-    dates = [t.transaction_date for t in transactions]
-    first_date = min(dates)
-    last_date = max(dates)
-    
-    # Если все транзакции за один день — считаем как 1 месяц
-    days_range = (last_date - first_date).days
-    if days_range < 30:
-        months = 1  # Минимум 1 месяц для прогноза
-    else:
-        months = days_range / 30
-    
-    total_income = sum(float(t.amount) for t in transactions if t.amount > 0)
-    total_expense = sum(abs(float(t.amount)) for t in transactions if t.amount < 0)
-    
-    avg_monthly_income = total_income / months if months > 0 else 0
-    avg_monthly_expense = total_expense / months if months > 0 else 0
-    
-    # Прогноз по категориям
-    category_spending = {}
+    # ======== Разбивка по месяцам для точного прогноза ========
+    # Группируем транзакции по месяцам
+    monthly_data = {}
     for t in transactions:
-        if t.amount < 0:
+        month_key = t.transaction_date.strftime("%Y-%m")
+        if month_key not in monthly_data:
+            monthly_data[month_key] = {"income": 0, "expense": 0, "categories": {}}
+        
+        if t.amount > 0:
+            monthly_data[month_key]["income"] += float(t.amount)
+        else:
+            monthly_data[month_key]["expense"] += abs(float(t.amount))
+            
             cat_id = t.category_id or 0
             cat_name = t.category.name if t.category else "Другое"
             cat_color = t.category.color if t.category else "#6B7280"
             
-            if cat_id not in category_spending:
-                category_spending[cat_id] = {
-                    "category_id": cat_id,
+            if cat_id not in monthly_data[month_key]["categories"]:
+                monthly_data[month_key]["categories"][cat_id] = {
                     "name": cat_name,
                     "color": cat_color,
-                    "total": 0,
+                    "amount": 0,
+                    "count": 0,
                 }
-            category_spending[cat_id]["total"] += abs(float(t.amount))
+            monthly_data[month_key]["categories"][cat_id]["amount"] += abs(float(t.amount))
+            monthly_data[month_key]["categories"][cat_id]["count"] += 1
+    
+    sorted_months = sorted(monthly_data.keys())
+    num_months = len(sorted_months)
+    
+    # ======== Прогноз с весами (свежие месяцы важнее) ========
+    # Веса: последний месяц важнее предыдущих
+    if num_months == 1:
+        weights = [1.0]
+    elif num_months == 2:
+        weights = [0.35, 0.65]
+    else:
+        weights = [0.2, 0.3, 0.5]
+        # Если месяцев больше 3, берём последние 3
+        sorted_months = sorted_months[-3:]
+        num_months = 3
+    
+    # Взвешенное среднее доходов и расходов
+    predicted_income = 0
+    predicted_expense = 0
+    for i, month_key in enumerate(sorted_months):
+        w = weights[i]
+        predicted_income += monthly_data[month_key]["income"] * w
+        predicted_expense += monthly_data[month_key]["expense"] * w
+    
+    # ======== Прогноз по категориям ========
+    # Собираем все категории
+    all_categories = {}
+    for t in transactions:
+        if t.amount < 0:
+            cat_id = t.category_id or 0
+            if cat_id not in all_categories:
+                all_categories[cat_id] = {
+                    "name": t.category.name if t.category else "Другое",
+                    "color": t.category.color if t.category else "#6B7280",
+                }
     
     by_category = []
-    for cat_id, info in category_spending.items():
-        predicted = info["total"] / months if months > 0 else 0
+    for cat_id, cat_info in all_categories.items():
+        # Взвешенный прогноз по категории
+        cat_predicted = 0
+        for i, month_key in enumerate(sorted_months):
+            w = weights[i]
+            cat_data = monthly_data[month_key]["categories"].get(cat_id)
+            if cat_data:
+                cat_predicted += cat_data["amount"] * w
         
-        # Определяем тренд
-        last_month = now - timedelta(days=30)
-        prev_month = now - timedelta(days=60)
-        
-        recent_sum = sum(
-            abs(float(t.amount)) for t in transactions
-            if t.amount < 0 and t.category_id == (cat_id or None) and t.transaction_date >= last_month
-        )
-        older_sum = sum(
-            abs(float(t.amount)) for t in transactions
-            if t.amount < 0 and t.category_id == (cat_id or None) 
-            and t.transaction_date >= prev_month and t.transaction_date < last_month
-        )
-        
-        if older_sum > 0:
-            change = ((recent_sum - older_sum) / older_sum) * 100
-            if change > 10:
-                trend = "up"
-            elif change < -10:
-                trend = "down"
+        # Тренд: сравниваем последний месяц с предпоследним
+        if len(sorted_months) >= 2:
+            last = monthly_data[sorted_months[-1]]["categories"].get(cat_id, {}).get("amount", 0)
+            prev = monthly_data[sorted_months[-2]]["categories"].get(cat_id, {}).get("amount", 0)
+            
+            if prev > 0:
+                change_pct = ((last - prev) / prev) * 100
+                if change_pct > 15:
+                    trend = "up"
+                elif change_pct < -15:
+                    trend = "down"
+                else:
+                    trend = "stable"
             else:
-                trend = "stable"
+                trend = "up" if last > 0 else "stable"
         else:
             trend = "stable"
         
-        by_category.append({
-            "category_id": cat_id,
-            "name": info["name"],
-            "color": info["color"],
-            "predicted_amount": round(predicted, 2),
-            "trend": trend,
-        })
+        if cat_predicted > 0:
+            by_category.append({
+                "category_id": cat_id,
+                "name": cat_info["name"],
+                "color": cat_info["color"],
+                "predicted_amount": round(cat_predicted, 2),
+                "trend": trend,
+            })
     
     by_category.sort(key=lambda x: x["predicted_amount"], reverse=True)
     
-    # ============ ML-рекомендации ============
+    # ======== ML-рекомендации ========
     recommendations = []
     
-    # Маппинг категорий БД → категории модели
     CATEGORY_MAP = {
-        "food": "groceries",
-        "restaurants": "restaurants",
-        "transport": "transport",
-        "shopping": "shopping",
-        "utilities": "utilities",
-        "health": "health",
-        "entertainment": "entertainment",
-        "education": "education",
+        "food": "groceries", "restaurants": "restaurants", "transport": "transport",
+        "shopping": "shopping", "utilities": "utilities", "health": "health",
+        "entertainment": "entertainment", "education": "education",
         "subscriptions": "subscriptions",
     }
     
-    # Преобразуем транзакции в формат для ML-модели
-    ml_transactions = []
-    for t in transactions:
-        cat_code = t.category.code if t.category else "other"
-        ml_category = CATEGORY_MAP.get(cat_code, "shopping")
-        
-        # Определяем выходной день
-        is_weekend = 1 if t.transaction_date.weekday() >= 5 else 0
-        
-        ml_transactions.append({
-            "type": "income" if t.amount > 0 else "expense",
-            "amount": abs(float(t.amount)),
-            "category": ml_category,
-            "weekend": is_weekend,
-            "merchant": t.merchant_name or "",
-        })
-    
-    # Получаем рекомендации от ML-модели
     recommender = registry.get("recommender")
-    if recommender and ml_transactions:
+    if recommender:
+        ml_transactions = []
+        for t in transactions:
+            cat_code = t.category.code if t.category else "other"
+            ml_category = CATEGORY_MAP.get(cat_code, "shopping")
+            is_weekend = 1 if t.transaction_date.weekday() >= 5 else 0
+            
+            ml_transactions.append({
+                "type": "income" if t.amount > 0 else "expense",
+                "amount": abs(float(t.amount)),
+                "category": ml_category,
+                "weekend": is_weekend,
+                "merchant": t.merchant_name or "",
+            })
+        
         try:
             ml_recs = recommender.predict(ml_transactions)
             for rec in ml_recs:
                 if isinstance(rec, dict):
-                    recommendations.append(rec.get("title", "") + " " + rec.get("description", ""))
+                    text = (rec.get("title", "") + " " + rec.get("description", "")).strip()
+                    if text:
+                        recommendations.append(text)
                 elif isinstance(rec, str):
                     recommendations.append(rec)
         except Exception as e:
-            import logging
-            logging.error(f"ML recommender error: {e}")
+            logger.error(f"ML recommender error: {e}")
     
-    # Добавляем базовые рекомендации если ML не дал
+    # Базовые рекомендации если ML не дал
     if not recommendations:
-        if avg_monthly_expense > avg_monthly_income * 0.9:
+        if predicted_expense > predicted_income * 0.9 and predicted_income > 0:
             recommendations.append("⚠️ Расходы близки к доходам. Рекомендуем сократить необязательные траты.")
         
-        if avg_monthly_income > avg_monthly_expense:
-            savings = avg_monthly_income - avg_monthly_expense
+        if predicted_income > predicted_expense:
+            savings = predicted_income - predicted_expense
             recommendations.append(f"💰 Вы можете откладывать ~{round(savings):,} ₽ в месяц.".replace(",", " "))
         
         growing = [c for c in by_category if c["trend"] == "up"]
         if growing:
-            top_growing = growing[0]
-            recommendations.append(f"📈 Расходы на \"{top_growing['name']}\" растут. Обратите внимание.")
+            recommendations.append(f"📈 Расходы на \"{growing[0]['name']}\" растут. Обратите внимание.")
         
         if not recommendations:
             recommendations.append("✅ Финансы в норме! Продолжайте отслеживать расходы.")
     
     return {
-        "next_month_total": round(avg_monthly_income - avg_monthly_expense, 2),
-        "next_month_expense": round(avg_monthly_expense, 2),
-        "next_month_income": round(avg_monthly_income, 2),
+        "next_month_total": round(predicted_income - predicted_expense, 2),
+        "next_month_expense": round(predicted_expense, 2),
+        "next_month_income": round(predicted_income, 2),
         "by_category": by_category,
         "trends": [],
-        "recommendations": recommendations,
+        "recommendations": [],
+    }
+
+@router.get("/tips")
+async def get_saving_tips(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Советы по экономии на основе ML-модели"""
+    from app.ml.model_loader import registry
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    now = datetime.now(timezone.utc)
+    start_date = now - timedelta(days=90)
+    
+    transactions = db.query(Transaction).options(
+        joinedload(Transaction.category)
+    ).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.transaction_date >= start_date
+    ).all()
+    
+    if not transactions:
+        return {"tips": [], "total_potential_savings": 0}
+    
+    # Базовая статистика
+    total_income = sum(float(t.amount) for t in transactions if t.amount > 0)
+    total_expense = sum(abs(float(t.amount)) for t in transactions if t.amount < 0)
+    days_range = (now - min(t.transaction_date for t in transactions)).days or 1
+    months = max(days_range / 30, 1)
+    monthly_income = total_income / months
+    monthly_expense = total_expense / months
+    
+    # Категории расходов
+    cat_totals = {}
+    for t in transactions:
+        if t.amount < 0:
+            cat_name = t.category.name if t.category else "Другое"
+            cat_code = t.category.code if t.category else "other"
+            cat_totals[cat_code] = {
+                "name": cat_name,
+                "total": cat_totals.get(cat_code, {}).get("total", 0) + abs(float(t.amount)),
+            }
+    
+    tips = []
+    total_potential_savings = 0
+    tip_id = 1
+    
+    # ======== ML-рекомендации ========
+    CATEGORY_MAP = {
+        "food": "groceries", "restaurants": "restaurants", "transport": "transport",
+        "shopping": "shopping", "utilities": "utilities", "health": "health",
+        "entertainment": "entertainment", "education": "education",
+        "subscriptions": "subscriptions",
+    }
+    
+    recommender = registry.get("recommender")
+    if recommender:
+        ml_transactions = []
+        for t in transactions:
+            cat_code = t.category.code if t.category else "other"
+            ml_category = CATEGORY_MAP.get(cat_code, "shopping")
+            is_weekend = 1 if t.transaction_date.weekday() >= 5 else 0
+            ml_transactions.append({
+                "type": "income" if t.amount > 0 else "expense",
+                "amount": abs(float(t.amount)),
+                "category": ml_category,
+                "weekend": is_weekend,
+                "merchant": t.merchant_name or "",
+            })
+        
+        try:
+            ml_recs = recommender.predict(ml_transactions)
+            for rec in ml_recs:
+                if isinstance(rec, dict):
+                    savings = rec.get("potential_savings", 0) or 0
+                    total_potential_savings += savings
+                    tips.append({
+                        "id": tip_id,
+                        "title": rec.get("title", "Совет"),
+                        "description": rec.get("description", ""),
+                        "potential_savings": savings if savings > 0 else None,
+                        "category": None,
+                        "priority": "high" if savings > 5000 else "medium" if savings > 1000 else "low",
+                    })
+                    tip_id += 1
+                elif isinstance(rec, str):
+                    tips.append({
+                        "id": tip_id,
+                        "title": rec,
+                        "description": "",
+                        "potential_savings": None,
+                        "category": None,
+                        "priority": "medium",
+                    })
+                    tip_id += 1
+        except Exception as e:
+            logger.error(f"ML recommender error: {e}")
+    
+    # ======== Базовые советы если ML не дал ========
+    if not tips:
+        # Совет по соотношению доходов/расходов
+        if monthly_income > 0:
+            expense_ratio = monthly_expense / monthly_income
+            if expense_ratio > 0.9:
+                potential = round(monthly_expense * 0.15)
+                total_potential_savings += potential
+                tips.append({
+                    "id": tip_id, "title": "⚠️ Критический уровень расходов",
+                    "description": f"Вы тратите {expense_ratio*100:.0f}% от доходов. Рекомендуем сократить расходы минимум на 15%.",
+                    "potential_savings": potential, "category": None, "priority": "high",
+                })
+                tip_id += 1
+            elif expense_ratio > 0.7:
+                potential = round(monthly_expense * 0.1)
+                total_potential_savings += potential
+                tips.append({
+                    "id": tip_id, "title": "📊 Расходы выше нормы",
+                    "description": f"Вы тратите {expense_ratio*100:.0f}% от доходов. Оптимальный уровень — 60-70%.",
+                    "potential_savings": potential, "category": None, "priority": "medium",
+                })
+                tip_id += 1
+        
+        # Советы по категориям
+        for code, info in sorted(cat_totals.items(), key=lambda x: x[1]["total"], reverse=True):
+            monthly_cat = info["total"] / months
+            share = info["total"] / total_expense * 100 if total_expense > 0 else 0
+            
+            if code in ("entertainment", "shopping") and share > 20:
+                potential = round(monthly_cat * 0.3)
+                total_potential_savings += potential
+                tips.append({
+                    "id": tip_id, "title": f"🛍️ Высокие расходы на «{info['name']}»",
+                    "description": f"Категория занимает {share:.0f}% расходов ({round(monthly_cat):,} ₽/мес). Попробуйте сократить на 30%.".replace(",", " "),
+                    "potential_savings": potential, "category": code.upper(), "priority": "high",
+                })
+                tip_id += 1
+            elif code == "food" and share > 35:
+                potential = round(monthly_cat * 0.15)
+                total_potential_savings += potential
+                tips.append({
+                    "id": tip_id, "title": "🍔 Много тратите на еду",
+                    "description": f"Еда занимает {share:.0f}% бюджета. Составляйте список покупок заранее.",
+                    "potential_savings": potential, "category": "FOOD", "priority": "medium",
+                })
+                tip_id += 1
+            elif code == "transport" and share > 15:
+                potential = round(monthly_cat * 0.2)
+                total_potential_savings += potential
+                tips.append({
+                    "id": tip_id, "title": "🚗 Оптимизируйте транспорт",
+                    "description": f"Транспорт — {share:.0f}% расходов. Рассмотрите общественный транспорт или каршеринг.",
+                    "potential_savings": potential, "category": "TRANSPORT", "priority": "low",
+                })
+                tip_id += 1
+        
+        # Совет по накоплениям
+        if monthly_income > monthly_expense:
+            savings = round(monthly_income - monthly_expense)
+            tips.append({
+                "id": tip_id, "title": "💰 Откладывайте излишки",
+                "description": f"У вас остаётся ~{savings:,} ₽/мес. Переводите их на накопительный счёт автоматически.".replace(",", " "),
+                "potential_savings": None, "category": None, "priority": "low",
+            })
+            tip_id += 1
+    
+    return {
+        "tips": tips,
+        "total_potential_savings": round(total_potential_savings),
     }

@@ -27,27 +27,7 @@ export default function SavingTips() {
         setData(tips);
       } catch (error) {
         console.error('Error loading tips:', error);
-        setData({
-          tips: [
-            {
-              id: 1,
-              title: 'Отслеживайте расходы',
-              description: 'Регулярно записывайте все траты для лучшего контроля бюджета',
-              potential_savings: null,
-              category: null,
-              priority: 'high',
-            },
-            {
-              id: 2,
-              title: 'Планируйте покупки',
-              description: 'Составляйте список перед походом в магазин',
-              potential_savings: 3000,
-              category: 'SHOPPING',
-              priority: 'medium',
-            },
-          ],
-          total_potential_savings: 3000,
-        });
+        setData(null);
       } finally {
         setIsLoading(false);
       }
