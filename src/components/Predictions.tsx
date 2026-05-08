@@ -70,7 +70,6 @@ export default function Predictions() {
   };
 
   const predictions = data.by_category || [];
-  const recommendations = data.recommendations || [];
 
   return (
     <div className="space-y-6">
@@ -137,21 +136,6 @@ export default function Predictions() {
                   </span>
                   {getTrendIcon(pred.trend)}
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Recommendations */}
-      {recommendations.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Рекомендации</h3>
-          <div className="space-y-3">
-            {recommendations.map((rec, index) => (
-              <div key={index} className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg">
-                <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <p className="text-gray-700">{rec}</p>
               </div>
             ))}
           </div>

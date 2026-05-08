@@ -231,10 +231,6 @@ async def get_predictions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Прогнозы расходов на следующий месяц"""
-    from app.ml.model_loader import registry
-    import logging
-    logger = logging.getLogger(__name__)
     
     now = datetime.now(timezone.utc)
     start_date = now - timedelta(days=90)
@@ -356,61 +352,7 @@ async def get_predictions(
             })
     
     by_category.sort(key=lambda x: x["predicted_amount"], reverse=True)
-    
-    # ======== ML-рекомендации ========
-    recommendations = []
-    
-    CATEGORY_MAP = {
-        "food": "groceries", "restaurants": "restaurants", "transport": "transport",
-        "shopping": "shopping", "utilities": "utilities", "health": "health",
-        "entertainment": "entertainment", "education": "education",
-        "subscriptions": "subscriptions",
-    }
-    
-    recommender = registry.get("recommender")
-    if recommender:
-        ml_transactions = []
-        for t in transactions:
-            cat_code = t.category.code if t.category else "other"
-            ml_category = CATEGORY_MAP.get(cat_code, "shopping")
-            is_weekend = 1 if t.transaction_date.weekday() >= 5 else 0
-            
-            ml_transactions.append({
-                "type": "income" if t.amount > 0 else "expense",
-                "amount": abs(float(t.amount)),
-                "category": ml_category,
-                "weekend": is_weekend,
-                "merchant": t.merchant_name or "",
-            })
-        
-        try:
-            ml_recs = recommender.predict(ml_transactions)
-            for rec in ml_recs:
-                if isinstance(rec, dict):
-                    text = (rec.get("title", "") + " " + rec.get("description", "")).strip()
-                    if text:
-                        recommendations.append(text)
-                elif isinstance(rec, str):
-                    recommendations.append(rec)
-        except Exception as e:
-            logger.error(f"ML recommender error: {e}")
-    
-    # Базовые рекомендации если ML не дал
-    if not recommendations:
-        if predicted_expense > predicted_income * 0.9 and predicted_income > 0:
-            recommendations.append("⚠️ Расходы близки к доходам. Рекомендуем сократить необязательные траты.")
-        
-        if predicted_income > predicted_expense:
-            savings = predicted_income - predicted_expense
-            recommendations.append(f"💰 Вы можете откладывать ~{round(savings):,} ₽ в месяц.".replace(",", " "))
-        
-        growing = [c for c in by_category if c["trend"] == "up"]
-        if growing:
-            recommendations.append(f"📈 Расходы на \"{growing[0]['name']}\" растут. Обратите внимание.")
-        
-        if not recommendations:
-            recommendations.append("✅ Финансы в норме! Продолжайте отслеживать расходы.")
-    
+
     return {
         "next_month_total": round(predicted_income - predicted_expense, 2),
         "next_month_expense": round(predicted_expense, 2),
@@ -443,7 +385,6 @@ async def get_saving_tips(
     if not transactions:
         return {"tips": [], "total_potential_savings": 0}
     
-    # Базовая статистика
     total_income = sum(float(t.amount) for t in transactions if t.amount > 0)
     total_expense = sum(abs(float(t.amount)) for t in transactions if t.amount < 0)
     days_range = (now - min(t.transaction_date for t in transactions)).days or 1
@@ -451,7 +392,6 @@ async def get_saving_tips(
     monthly_income = total_income / months
     monthly_expense = total_expense / months
     
-    # Категории расходов
     cat_totals = {}
     for t in transactions:
         if t.amount < 0:
@@ -466,7 +406,6 @@ async def get_saving_tips(
     total_potential_savings = 0
     tip_id = 1
     
-    # ======== ML-рекомендации ========
     CATEGORY_MAP = {
         "food": "groceries", "restaurants": "restaurants", "transport": "transport",
         "shopping": "shopping", "utilities": "utilities", "health": "health",
@@ -517,9 +456,7 @@ async def get_saving_tips(
         except Exception as e:
             logger.error(f"ML recommender error: {e}")
     
-    # ======== Базовые советы если ML не дал ========
     if not tips:
-        # Совет по соотношению доходов/расходов
         if monthly_income > 0:
             expense_ratio = monthly_expense / monthly_income
             if expense_ratio > 0.9:
@@ -541,7 +478,6 @@ async def get_saving_tips(
                 })
                 tip_id += 1
         
-        # Советы по категориям
         for code, info in sorted(cat_totals.items(), key=lambda x: x[1]["total"], reverse=True):
             monthly_cat = info["total"] / months
             share = info["total"] / total_expense * 100 if total_expense > 0 else 0
@@ -574,7 +510,6 @@ async def get_saving_tips(
                 })
                 tip_id += 1
         
-        # Совет по накоплениям
         if monthly_income > monthly_expense:
             savings = round(monthly_income - monthly_expense)
             tips.append({
