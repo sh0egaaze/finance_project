@@ -79,6 +79,9 @@ class FinanceParser:
         self.model.eval()
         self.max_length = conf["max_seq_length"]
         
+        self.vocab_words = list(RUS_NUMBERS.keys())
+        self._typo_cache: dict[str, str | None] = {}
+        
         print("      nlp_parser: init complete!", flush=True)
 
     def _fix_typos(self, word: str):
@@ -107,10 +110,14 @@ class FinanceParser:
         
         for w in words:
             # 1. Проверяем сокращения типа "5к" или "1.5лям"
-            short_match = re.match(r'(\d+[\.,]?\d*)(к|лям|косаря|штуки)', w)
+            short_match = re.match(r'(\d+[\.,]?\d*)(к|кес|косарь|косаря|косарей|штука|штуки|штук|тыщ|тыщу|тыщей|лям|ляма|лямов|миллион|миллиона|миллионов)', w)
             if short_match:
                 val = float(short_match.group(1).replace(",", "."))
-                multiplier = 1000 if short_match.group(2) == 'к' or 'штук' in short_match.group(2) else 1000000
+                suffix = short_match.group(2)
+                if suffix in ('к', 'кес', 'косарь', 'косаря', 'косарей', 'штука', 'штуки', 'штук', 'тыщ', 'тыщу', 'тыщей'):
+                    multiplier = 1000
+                else:
+                    multiplier = 1000000
                 total += val * multiplier
                 found = True
                 continue
