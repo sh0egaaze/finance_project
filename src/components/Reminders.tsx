@@ -71,6 +71,11 @@ export default function Reminders() {
         next_reminder_date: new Date().toISOString().split('T')[0],
       });
       setReminderTime('09:00');
+      loadReminders();
+    } catch (error) {
+      console.error('Error creating reminder:', error);
+    }
+  };
 
   const handleDelete = async (id: number) => {
     if (!confirm('Удалить напоминание?')) return;
