@@ -32,6 +32,8 @@ async def process_reminders():
             Reminder.is_completed == False,
             Reminder.next_reminder_date <= now
         ).all()
+
+        logger.info(f"Проверка напоминаний: найдено {len(due_reminders)} шт.")
         
         for rem in due_reminders:
             try:
@@ -78,13 +80,13 @@ async def process_reminders():
                 rem.last_sent_date = now
                 
                 # Рассчитываем следующую дату и время
-                if rem.frequency == "daily":
+                if rem.frequency.value == "daily":
                     rem.next_reminder_date = now + timedelta(days=1)
-                elif rem.frequency == "weekly":
+                elif rem.frequency.value == "weekly":
                     rem.next_reminder_date = now + timedelta(weeks=1)
-                elif rem.frequency == "monthly":
+                elif rem.frequency.value == "monthly":
                     rem.next_reminder_date = now + relativedelta(months=1)
-                elif rem.frequency == "once":
+                elif rem.frequency.value == "once":
                     rem.is_completed = True
                 
                 # Проверяем лимит повторений
@@ -103,6 +105,6 @@ async def process_reminders():
 
 
 def setup_scheduler():
-    scheduler.add_job(process_reminders, trigger=IntervalTrigger(minutes=60), id="reminders")
+    scheduler.add_job(process_reminders, trigger=IntervalTrigger(minutes=1), id="reminders")
     scheduler.start()
     logger.info("Планировщик инициализирован")
