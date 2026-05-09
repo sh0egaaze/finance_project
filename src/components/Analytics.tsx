@@ -41,9 +41,10 @@ export default function Analytics() {
   const [isLoading, setIsLoading] = useState(true);
   
   const today = new Date();
-  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-  const [dateFrom, setDateFrom] = useState(firstDay.toISOString().split('T')[0]);
-  const [dateTo, setDateTo] = useState(today.toISOString().split('T')[0]);
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const firstDayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+  const [dateFrom, setDateFrom] = useState(firstDayStr);
+  const [dateTo, setDateTo] = useState(todayStr);
 
   useEffect(() => {
     const loadAnalytics = async () => {
@@ -155,7 +156,7 @@ export default function Analytics() {
             <BarChart data={spendingByCategory}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tickFormatter={(v) => Number(v).toLocaleString('ru-RU')} />
+              <YAxis tickFormatter={(v) => Number(v).toLocaleString('ru-RU')} width={80} />
               <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Сумма']} />
               <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
                 {spendingByCategory.map((entry, index) => (
@@ -178,7 +179,7 @@ export default function Analytics() {
                 cx="50%"
                 cy="50%"
                 outerRadius={100}
-                label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
+                label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
               >
                 {spendingByCategory.map((entry, index) => (
                   <Cell key={index} fill={entry.fill} />

@@ -77,11 +77,27 @@ class LoginRequest(BaseModel):
     password: str
 
 DEFAULT_CATEGORIES = [
-    {"code": "food",      "name": "Еда",         "icon": "🍔", "color": "#ef4444", "is_expense": True},
-    {"code": "transport",  "name": "Транспорт",     "icon": "🚗", "color": "#f97316", "is_expense": True},
-    {"code": "housing",    "name": "Жильё",        "icon": "🏠", "color": "#8b5cf6", "is_expense": True},
-    {"code": "health",     "name": "Здоровье",      "icon": "💊", "color": "#06b6d4", "is_expense": True},
-    {"code": "salary",     "name": "Зарплата",      "icon": "💰", "color": "#22c55e", "is_income": True},
+    {"code": "food",           "name": "Еда и продукты",       "icon": "🍔", "color": "#ef4444", "is_expense": True},
+    {"code": "restaurants",    "name": "Рестораны и кафе",      "icon": "🍽️", "color": "#f97316", "is_expense": True},
+    {"code": "transport",      "name": "Транспорт",             "icon": "🚗", "color": "#3b82f6", "is_expense": True},
+    {"code": "housing",        "name": "Жильё и ЖКХ",          "icon": "🏠", "color": "#8b5cf6", "is_expense": True},
+    {"code": "shopping",       "name": "Покупки и товары",      "icon": "🛍️", "color": "#ec4899", "is_expense": True},
+    {"code": "health",         "name": "Здоровье и медицина",   "icon": "💊", "color": "#06b6d4", "is_expense": True},
+    {"code": "entertainment",  "name": "Развлечения",           "icon": "🎬", "color": "#a855f7", "is_expense": True},
+    {"code": "education",      "name": "Образование",           "icon": "📚", "color": "#0ea5e9", "is_expense": True},
+    {"code": "subscriptions",  "name": "Подписки и сервисы",    "icon": "📱", "color": "#14b8a6", "is_expense": True},
+    {"code": "beauty",         "name": "Красота и уход",        "icon": "💅", "color": "#f472b6", "is_expense": True},
+    {"code": "sports",         "name": "Спорт и фитнес",        "icon": "🏋️", "color": "#22c55e", "is_expense": True},
+    {"code": "telecom",        "name": "Связь и телеком",       "icon": "📞", "color": "#6366f1", "is_expense": True},
+    {"code": "insurance",      "name": "Страхование",           "icon": "🛡️", "color": "#64748b", "is_expense": True},
+    {"code": "taxes",          "name": "Налоги и штрафы",       "icon": "🏛️", "color": "#dc2626", "is_expense": True},
+    {"code": "travel",         "name": "Путешествия",           "icon": "✈️", "color": "#0891b2", "is_expense": True},
+    {"code": "pets",           "name": "Домашние животные",     "icon": "🐾", "color": "#a3e635", "is_expense": True},
+    {"code": "charity",        "name": "Благотворительность",   "icon": "❤️", "color": "#e11d48", "is_expense": True},
+    {"code": "cash",           "name": "Наличные",              "icon": "💵", "color": "#84cc16", "is_income": True, "is_expense": False},
+    {"code": "other",          "name": "Другое",                "icon": "📦", "color": "#6b7280", "is_expense": True},
+    {"code": "salary",         "name": "Зарплата и доход",      "icon": "💰", "color": "#16a34a", "is_income": True, "is_expense": False},
+    {"code": "transfers",      "name": "Переводы",              "icon": "🔄", "color": "#2563eb", "is_income": True, "is_expense": True},
 ]
 
 def create_default_categories(user_id: int, db: Session):

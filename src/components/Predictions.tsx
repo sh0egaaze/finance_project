@@ -8,6 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Cell,
 } from 'recharts';
 import { api, PredictionsData } from '../api';
 
@@ -113,10 +114,14 @@ export default function Predictions() {
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={predictions}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              <Bar dataKey="predicted_amount" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tickFormatter={(v) => Number(v).toLocaleString('ru-RU')} width={80} />
+              <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Сумма']} />
+              <Bar dataKey="predicted_amount" radius={[4, 4, 0, 0]}>
+                {predictions.map((entry, index) => (
+                  <Cell key={index} fill={entry.color || '#3B82F6'} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
 

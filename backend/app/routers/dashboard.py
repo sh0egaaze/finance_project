@@ -259,17 +259,21 @@ async def get_analytics(
     trend_data = {}
     
     for t in transactions:
-        day = t.transaction_date.strftime("%d.%m")
-        if day not in trend_data:
-            trend_data[day] = {"date": day, "income": 0, "expense": 0}
+        day_key = t.transaction_date.strftime("%Y-%m-%d")
+        day_label = t.transaction_date.strftime("%d.%m")
+        if day_key not in trend_data:
+            trend_data[day_key] = {"date": day_label, "sort_key": day_key, "income": 0, "expense": 0}
         
         if t.amount > 0:
-            trend_data[day]["income"] += float(t.amount)
+            trend_data[day_key]["income"] += float(t.amount)
         else:
-            trend_data[day]["expense"] += abs(float(t.amount))
+            trend_data[day_key]["expense"] += abs(float(t.amount))
     
     # Сортируем по дате
-    spending_trend = list(trend_data.values())
+    spending_trend = [
+        {"date": v["date"], "income": v["income"], "expense": v["expense"]}
+        for v in sorted(trend_data.values(), key=lambda x: x["sort_key"])
+    ]
     
     # Расходы по дням (для BarChart)
     spending_by_day = []
