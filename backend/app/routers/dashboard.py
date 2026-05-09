@@ -14,15 +14,14 @@ from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-
 class DashboardResponse(BaseModel):
     stats: dict
     recent_transactions: List[dict]
     spending_by_category: List[dict]
+    income_by_category: List[dict]
     monthly_trend: List[dict]
     upcoming_reminders: List[dict]
     suspicious_transactions: List[dict]
-
 
 @router.get("", response_model=DashboardResponse)
 async def get_dashboard(
@@ -31,21 +30,43 @@ async def get_dashboard(
 ):
     """Получить данные дашборда"""
     now = datetime.now(timezone.utc)
+    
+    # Текущий месяц: с 1 числа по сегодня
+    current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Для динамики берём последние 30 дней
     month_ago = now - timedelta(days=30)
     
-    # Получаем транзакции за месяц
+    # Транзакции за текущий месяц (для категорий и статистики)
     transactions = db.query(Transaction).options(
+        joinedload(Transaction.category)
+    ).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.transaction_date >= current_month_start
+    ).all()
+    
+    # Транзакции за 30 дней (для динамики)
+    trend_transactions = db.query(Transaction).options(
         joinedload(Transaction.category)
     ).filter(
         Transaction.user_id == current_user.id,
         Transaction.transaction_date >= month_ago
     ).all()
     
-    # Считаем суммы
-    total_income = sum(float(t.amount) for t in transactions if t.amount > 0)
-    total_expense = abs(sum(float(t.amount) for t in transactions if t.amount < 0))
-    total_balance = total_income - total_expense
-    savings_rate = (total_income - total_expense) / total_income * 100 if total_income > 0 else 0
+    # Суммы за текущий месяц (для карточек доходы/расходы)
+    month_income = sum(float(t.amount) for t in transactions if t.amount > 0)
+    month_expense = abs(sum(float(t.amount) for t in transactions if t.amount < 0))
+    
+    # Баланс за ВСЁ ВРЕМЯ (не обнуляется каждый месяц)
+    all_transactions = db.query(Transaction).filter(
+        Transaction.user_id == current_user.id
+    ).all()
+    all_income = sum(float(t.amount) for t in all_transactions if t.amount > 0)
+    all_expense = abs(sum(float(t.amount) for t in all_transactions if t.amount < 0))
+    total_balance = all_income - all_expense
+    
+    # Накопления = % дохода сохранённый в этом месяце
+    savings_rate = (month_income - month_expense) / month_income * 100 if month_income > 0 else 0
     
     # Последние транзакции
     recent = db.query(Transaction).filter(
@@ -63,31 +84,34 @@ async def get_dashboard(
             "transaction_date": t.transaction_date.isoformat(),
         })
     
-    # Расходы по категориям
+    # Расходы по категориям (включая "Без категории")
     spending_by_category = []
-    categories = db.query(Category).filter(Category.is_expense == True, Category.is_active == True).all()
+    expense_totals = {}
     
-    for cat in categories:
-        cat_sum = sum(
-            abs(float(t.amount)) 
-            for t in transactions 
-            if t.category_id == cat.id and t.amount < 0
-        )
-        if cat_sum > 0:
-            spending_by_category.append({
-                "category_id": cat.id,
-                "category_name": cat.name,
-                "category_icon": cat.icon,
-                "category_color": cat.color,
-                "amount": cat_sum,
-            })
+    for t in transactions:
+        if t.amount < 0:
+            cat_id = t.category_id or 0
+            cat_name = t.category.name if t.category else "Без категории"
+            cat_color = t.category.color if t.category else "#6B7280"
+            cat_icon = t.category.icon if t.category else "•"
+            
+            if cat_id not in expense_totals:
+                expense_totals[cat_id] = {
+                    "category_id": cat_id,
+                    "category_name": cat_name,
+                    "category_icon": cat_icon,
+                    "category_color": cat_color,
+                    "amount": 0,
+                }
+            expense_totals[cat_id]["amount"] += abs(float(t.amount))
     
+    spending_by_category = list(expense_totals.values())
     spending_by_category.sort(key=lambda x: x["amount"], reverse=True)
 
-    # Тренд по дням за месяц
+    # Тренд по дням за последние 30 дней
     monthly_trend = []
     trend_by_day = {}
-    for t in transactions:
+    for t in trend_transactions:
         day = t.transaction_date.strftime("%Y-%m-%d")
         if day not in trend_by_day:
             trend_by_day[day] = {"date": day, "income": 0, "expense": 0}
@@ -100,40 +124,27 @@ async def get_dashboard(
 
     # Доходы по категориям
     income_by_category = []
-    income_categories = db.query(Category).filter(Category.is_income == True, Category.is_active == True).all()
+    income_totals = {}
     
-    for cat in income_categories:
-        cat_sum = sum(
-            float(t.amount)
-            for t in transactions
-            if t.category_id == cat.id and t.amount > 0
-        )
-        if cat_sum > 0:
-            income_by_category.append({
-                "category_id": cat.id,
-                "category": cat.name,
-                "name": cat.name,
-                "amount": cat_sum,
-                "color": cat.color or "#22c55e",
-                "icon": cat.icon or "💰",
-            })
+    for t in transactions:
+        if t.amount > 0:
+            cat_id = t.category_id or 0
+            cat_name = t.category.name if t.category else "Другой доход"
+            cat_color = t.category.color if t.category else "#22c55e"
+            cat_icon = t.category.icon if t.category else "💰"
+            
+            if cat_id not in income_totals:
+                income_totals[cat_id] = {
+                    "category_id": cat_id,
+                    "category": cat_name,
+                    "name": cat_name,
+                    "amount": 0,
+                    "color": cat_color,
+                    "icon": cat_icon,
+                }
+            income_totals[cat_id]["amount"] += float(t.amount)
     
-    # Доходы без категории
-    uncategorized_income = sum(
-        float(t.amount)
-        for t in transactions
-        if t.amount > 0 and t.category_id is None
-    )
-    if uncategorized_income > 0:
-        income_by_category.append({
-            "category_id": 0,
-            "category": "Другой доход",
-            "name": "Другой доход",
-            "amount": uncategorized_income,
-            "color": "#27AE60",
-            "icon": "💵",
-        })
-    
+    income_by_category = list(income_totals.values())
     income_by_category.sort(key=lambda x: x["amount"], reverse=True)
     
     # Ближайшие напоминания
@@ -156,8 +167,8 @@ async def get_dashboard(
     return {
         "stats": {
             "total_balance": total_balance,
-            "total_income": total_income,
-            "total_expense": total_expense,
+            "total_income": month_income,
+            "total_expense": month_expense,
             "savings_rate": savings_rate,
             "transaction_count": len(transactions),
         },
@@ -183,6 +194,8 @@ async def get_dashboard(
 @router.get("/analytics")
 async def get_analytics(
     period: str = "month",
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -190,22 +203,32 @@ async def get_analytics(
     now = datetime.now(timezone.utc)
     
     # Определяем период
-    if period == "week":
-        start_date = now - timedelta(days=7)
-    elif period == "month":
-        start_date = now - timedelta(days=30)
-    elif period == "quarter":
-        start_date = now - timedelta(days=90)
-    elif period == "year":
-        start_date = now - timedelta(days=365)
+    if date_from and date_to:
+        try:
+            start_date = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
+            end_date = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        except ValueError:
+            start_date = now - timedelta(days=30)
+            end_date = now
     else:
-        start_date = now - timedelta(days=30)
+        if period == "week":
+            start_date = now - timedelta(days=7)
+        elif period == "month":
+            start_date = now - timedelta(days=30)
+        elif period == "quarter":
+            start_date = now - timedelta(days=90)
+        elif period == "year":
+            start_date = now - timedelta(days=365)
+        else:
+            start_date = now - timedelta(days=30)
+        end_date = now
     
     transactions = db.query(Transaction).options(
         joinedload(Transaction.category)
     ).filter(
         Transaction.user_id == current_user.id,
-        Transaction.transaction_date >= start_date
+        Transaction.transaction_date >= start_date,
+        Transaction.transaction_date <= end_date
     ).all()
     
     # Расходы по категориям (для PieChart и BarChart)

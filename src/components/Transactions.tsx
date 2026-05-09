@@ -14,6 +14,8 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedSource, setSelectedSource] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -91,6 +93,14 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
     if (selectedSource) {
       if (!tx.source || tx.source !== selectedSource) return false;
     }
+    if (dateFrom && tx.transaction_date) {
+      if (new Date(tx.transaction_date) < new Date(dateFrom)) return false;
+    }
+    if (dateTo && tx.transaction_date) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      if (new Date(tx.transaction_date) > to) return false;
+    }
     return true;
   });
 
@@ -166,6 +176,22 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
             />
           </div>
           
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+            <span className="text-gray-400">—</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+          
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
@@ -187,6 +213,19 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
             <option value="tbank_api">Т-Банк</option>
           </select>
 
+          <button
+            onClick={() => {
+              setSearchQuery('');
+              setSelectedCategory('');
+              setSelectedSource('');
+              setDateFrom('');
+              setDateTo('');
+            }}
+            className="px-3 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Сбросить
+          </button>
+          
           <button
             onClick={loadTransactions}
             className="p-2 hover:bg-gray-100 rounded-lg"

@@ -39,13 +39,17 @@ const formatCurrency = (value: number) => {
 export default function Analytics() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [period, setPeriod] = useState('month');
+  
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+  const [dateFrom, setDateFrom] = useState(firstDay.toISOString().split('T')[0]);
+  const [dateTo, setDateTo] = useState(today.toISOString().split('T')[0]);
 
   useEffect(() => {
     const loadAnalytics = async () => {
       setIsLoading(true);
       try {
-        const analytics = await api.getAnalytics(period);
+        const analytics = await api.getAnalytics(undefined, dateFrom, dateTo);
         setData(analytics);
       } catch (error) {
         console.error('Error loading analytics:', error);
@@ -54,7 +58,7 @@ export default function Analytics() {
       }
     };
     loadAnalytics();
-  }, [period]);
+  }, [dateFrom, dateTo]);
 
   if (isLoading) {
     return (
@@ -95,16 +99,21 @@ export default function Analytics() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-800">Аналитика</h2>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="week">Неделя</option>
-          <option value="month">Месяц</option>
-          <option value="quarter">Квартал</option>
-          <option value="year">Год</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+          />
+          <span className="text-gray-400">—</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+          />
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -145,9 +154,9 @@ export default function Analytics() {
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={spendingByCategory}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
-              <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tickFormatter={(v) => Number(v).toLocaleString('ru-RU')} />
+              <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Сумма']} />
               <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
                 {spendingByCategory.map((entry, index) => (
                   <Cell key={index} fill={entry.fill} />
@@ -175,7 +184,7 @@ export default function Analytics() {
                   <Cell key={index} fill={entry.fill} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+              <Tooltip formatter={(value) => [formatCurrency(Number(value))]} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -189,8 +198,11 @@ export default function Analytics() {
             <LineChart data={data.spending_trend}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
-              <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+              <YAxis tickFormatter={(v) => Number(v).toLocaleString('ru-RU')} width={80} />
+              <Tooltip formatter={(value, name) => {
+                const label = name === 'income' ? 'Доходы' : 'Расходы';
+                return [formatCurrency(Number(value)), label];
+              }} />
               <Line type="monotone" dataKey="income" stroke="#10B981" name="Доходы" strokeWidth={2} />
               <Line type="monotone" dataKey="expense" stroke="#EF4444" name="Расходы" strokeWidth={2} />
             </LineChart>

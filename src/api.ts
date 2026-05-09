@@ -407,10 +407,13 @@ class ApiClient {
     return response.data;
   }
 
-  async getAnalytics(period?: string): Promise<AnalyticsData> {
-    const response = await axiosInstance.get('/dashboard/analytics', {
-      params: { period: period || 'month' },
-    });
+  async getAnalytics(period?: string, dateFrom?: string, dateTo?: string): Promise<AnalyticsData> {
+    const params: any = {};
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
+    if (!dateFrom && !dateTo && period) params.period = period;
+    
+    const response = await axiosInstance.get('/dashboard/analytics', { params });
     return response.data;
   }
 

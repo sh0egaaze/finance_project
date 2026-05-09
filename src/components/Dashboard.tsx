@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell
+  ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
 import { api, DashboardData, User } from '../api';
 import { SmartInput } from './SmartInput';
@@ -164,38 +164,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Динамика</h3>
           {monthly_trend && monthly_trend.length > 0 ? (
             <ResponsiveContainer width="100%" height={250}>
-              <AreaChart data={monthly_trend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <LineChart data={monthly_trend}>
+                <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 12 }}
                   tickFormatter={(value) => {
                     const date = new Date(value);
-                    return `${date.getDate()}.${date.getMonth() + 1}`;
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    return `${day}.${month}`;
                   }}
                 />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip
-                  formatter={(value) => [`${Number(value).toLocaleString('ru-RU')} ₽`]}
+                  formatter={(value, name) => {
+                    const label = name === 'income' ? 'Доходы' : 'Расходы';
+                    return [`${Number(value).toLocaleString('ru-RU')} ₽`, label];
+                  }}
                   labelFormatter={(label) => new Date(label).toLocaleDateString('ru-RU')}
                 />
-                <Area
-                  type="monotone"
-                  dataKey="income"
-                  name="Доходы"
-                  stroke="#22c55e"
-                  fill="#22c55e"
-                  fillOpacity={0.2}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="expense"
-                  name="Расходы"
-                  stroke="#ef4444"
-                  fill="#ef4444"
-                  fillOpacity={0.2}
-                />
-              </AreaChart>
+                <Line type="monotone" dataKey="income" name="income" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                <Line type="monotone" dataKey="expense" name="expense" stroke="#EF4444" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+              </LineChart>
             </ResponsiveContainer>
           ) : (
             <div className="h-[250px] flex items-center justify-center text-gray-400">
@@ -203,71 +194,71 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Категории */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">
-            {showIncome ? 'Доходы по категориям' : 'Расходы по категориям'}
-          </h3>
-          <button
-            onClick={() => setShowIncome(!showIncome)}
-            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-            title={showIncome ? 'Показать расходы' : 'Показать доходы'}
-          >
-            <ArrowRight className={`w-5 h-5 transition-colors ${showIncome ? 'text-green-500' : 'text-red-500'}`} />
-          </button>
-        </div>
-        {(() => {
-          const categoryData = showIncome 
-            ? (data.income_by_category || []) 
-            : (spending_by_category || []);
-          
-          return categoryData.length > 0 ? (
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width="50%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    dataKey="amount"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                  >
-                    {categoryData.map((entry: any, index: number) => (
-                      <Cell key={index} fill={entry.color || (showIncome ? '#22c55e' : '#6B7280')} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: any) => [`${Number(value).toLocaleString('ru-RU')} ₽`]} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex-1 space-y-2">
-                {categoryData.slice(0, 5).map((cat: any) => (
-                  <div key={cat.category || cat.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: cat.color || (showIncome ? '#22c55e' : '#6B7280') }}
-                      />
-                      <span className="text-sm text-gray-600">{cat.name}</span>
+        {/* Категории */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {showIncome ? 'Доходы по категориям' : 'Расходы по категориям'}
+            </h3>
+            <button
+              onClick={() => setShowIncome(!showIncome)}
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              title={showIncome ? 'Показать расходы' : 'Показать доходы'}
+            >
+              <ArrowRight className="w-5 h-5 text-gray-400 hover:text-blue-500 transition-colors" />
+            </button>
+          </div>
+          {(() => {
+            const categoryData = showIncome 
+              ? (data.income_by_category || []) 
+              : (spending_by_category || []);
+            
+            return categoryData.length > 0 ? (
+              <div className="flex items-center gap-4">
+                <ResponsiveContainer width="50%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={categoryData}
+                      dataKey="amount"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                    >
+                      {categoryData.map((entry: any, index: number) => (
+                        <Cell key={index} fill={entry.color || (showIncome ? '#22c55e' : '#6B7280')} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: any) => [`${Number(value).toLocaleString('ru-RU')} ₽`]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex-1 space-y-2">
+                  {categoryData.slice(0, 5).map((cat: any) => (
+                    <div key={cat.category || cat.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: cat.color || (showIncome ? '#22c55e' : '#6B7280') }}
+                        />
+                        <span className="text-sm text-gray-600">{cat.name}</span>
+                      </div>
+                      <span className="text-sm font-medium">
+                        {cat.amount.toLocaleString('ru-RU')} ₽
+                      </span>
                     </div>
-                    <span className="text-sm font-medium">
-                      {cat.amount.toLocaleString('ru-RU')} ₽
-                    </span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="h-[200px] flex items-center justify-center text-gray-400">
-              {showIncome ? 'Нет доходов' : 'Нет расходов'}
-            </div>
-          );
-        })()}
-      </div>  
+            ) : (
+              <div className="h-[200px] flex items-center justify-center text-gray-400">
+                {showIncome ? 'Нет доходов' : 'Нет расходов'}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
 
       {/* Нижняя секция */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
