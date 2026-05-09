@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Bell, Trash2, Check, Clock, Calendar } from 'lucide-react';
+import { Plus, Bell, Trash2, Check, Clock, Calendar, Edit2 } from 'lucide-react';
 import { api, Reminder, ReminderCreate } from '../api';
 
 const formatCurrency = (value: number) => {
@@ -30,12 +30,16 @@ export default function Reminders() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-    const [formData, setFormData] = useState<ReminderCreate>({
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [formData, setFormData] = useState<ReminderCreate>({
     title: '',
     description: '',
     amount: undefined,
     frequency: 'once',
-    next_reminder_date: new Date().toISOString().split('T')[0],
+      next_reminder_date: (() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      })(),
   });
   const [reminderTime, setReminderTime] = useState('09:00');
 
@@ -54,26 +58,62 @@ export default function Reminders() {
     loadReminders();
   }, []);
 
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      description: '',
+      amount: undefined,
+      frequency: 'once',
+            next_reminder_date: (() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      })(),
+    });
+    setReminderTime('09:00');
+    setEditingReminder(null);
+  };
+
+  const openCreateForm = () => {
+    resetForm();
+    setShowForm(true);
+  };
+
+  const openEditForm = (reminder: Reminder) => {
+    const date = new Date(reminder.next_reminder_date);
+    setFormData({
+      title: reminder.title,
+      description: reminder.description || '',
+      amount: reminder.amount ? Number(reminder.amount) : undefined,
+      frequency: reminder.frequency,
+      next_reminder_date: date.toISOString().split('T')[0],
+    });
+    setReminderTime(
+      `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+    );
+    setEditingReminder(reminder);
+    setShowForm(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const dateWithTime = new Date(`${formData.next_reminder_date}T${reminderTime}:00`);
-      await api.createReminder({
+      const payload = {
         ...formData,
         next_reminder_date: dateWithTime.toISOString(),
-      });
+      };
+
+      if (editingReminder) {
+        await api.updateReminder(editingReminder.id, payload);
+      } else {
+        await api.createReminder(payload);
+      }
+
       setShowForm(false);
-      setFormData({
-        title: '',
-        description: '',
-        amount: undefined,
-        frequency: 'once',
-        next_reminder_date: new Date().toISOString().split('T')[0],
-      });
-      setReminderTime('09:00');
+      resetForm();
       loadReminders();
     } catch (error) {
-      console.error('Error creating reminder:', error);
+      console.error('Error saving reminder:', error);
     }
   };
 
@@ -109,7 +149,7 @@ export default function Reminders() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-800">Напоминания</h2>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={openCreateForm}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -117,17 +157,23 @@ export default function Reminders() {
         </button>
       </div>
 
-      {/* Add Form Modal */}
+      {/* Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowForm(false)}>
-          <div onClick={(e) => e.stopPropagation()}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">Новое напоминание</h3>
+        <div
+          className="fixed top-0 left-0 right-0 bottom-0 bg-black/50 flex items-center justify-center"
+          style={{ zIndex: 9999 }}
+          onClick={() => { setShowForm(false); resetForm(); }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+              {editingReminder ? 'Редактировать напоминание' : 'Новое напоминание'}
+            </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Название *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Название *</label>
                 <input
                   type="text"
                   value={formData.title}
@@ -139,9 +185,7 @@ export default function Reminders() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Описание
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Описание</label>
                 <input
                   type="text"
                   value={formData.description || ''}
@@ -152,9 +196,7 @@ export default function Reminders() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Сумма (необязательно)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Сумма (необязательно)</label>
                 <input
                   type="number"
                   value={formData.amount || ''}
@@ -165,9 +207,7 @@ export default function Reminders() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Периодичность
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Периодичность</label>
                 <select
                   value={formData.frequency}
                   onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
@@ -183,9 +223,7 @@ export default function Reminders() {
 
               {formData.frequency === 'custom' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Интервал (дней)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Интервал (дней)</label>
                   <input
                     type="number"
                     value={formData.interval_days || ''}
@@ -198,9 +236,7 @@ export default function Reminders() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Дата
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Дата</label>
                   <input
                     type="date"
                     value={formData.next_reminder_date}
@@ -210,9 +246,7 @@ export default function Reminders() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Время
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Время</label>
                   <input
                     type="time"
                     value={reminderTime}
@@ -226,7 +260,7 @@ export default function Reminders() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => { setShowForm(false); resetForm(); }}
                   className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Отмена
@@ -235,11 +269,10 @@ export default function Reminders() {
                   type="submit"
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  Создать
+                  {editingReminder ? 'Сохранить' : 'Создать'}
                 </button>
               </div>
             </form>
-          </div>
           </div>
         </div>
       )}
@@ -256,15 +289,11 @@ export default function Reminders() {
           {reminders.map((reminder) => (
             <div
               key={reminder.id}
-              className={`bg-white rounded-xl shadow-sm p-6 ${
-                reminder.is_completed ? 'opacity-50' : ''
-              }`}
+              className={`bg-white rounded-xl shadow-sm p-6 ${reminder.is_completed ? 'opacity-50' : ''}`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4">
-                  <div className={`p-3 rounded-lg ${
-                    reminder.is_completed ? 'bg-green-100' : 'bg-blue-100'
-                  }`}>
+                  <div className={`p-3 rounded-lg ${reminder.is_completed ? 'bg-green-100' : 'bg-blue-100'}`}>
                     {reminder.is_completed ? (
                       <Check className="w-6 h-6 text-green-600" />
                     ) : (
@@ -296,19 +325,28 @@ export default function Reminders() {
                       {formatCurrency(reminder.amount)}
                     </span>
                   )}
-                  <div className="flex gap-2">
+                  <div className="flex gap-1">
                     {!reminder.is_completed && (
-                      <button
-                        onClick={() => handleComplete(reminder.id)}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                        title="Выполнено"
-                      >
-                        <Check className="w-5 h-5" />
-                      </button>
+                      <>
+                        <button
+                          onClick={() => openEditForm(reminder)}
+                          className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Редактировать"
+                        >
+                          <Edit2 className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleComplete(reminder.id)}
+                          className="p-2 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg transition-colors"
+                          title="Выполнено"
+                        >
+                          <Check className="w-5 h-5" />
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => handleDelete(reminder.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                       title="Удалить"
                     >
                       <Trash2 className="w-5 h-5" />

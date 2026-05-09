@@ -327,6 +327,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
           <div className="flex items-center gap-2 mb-4">
             <Bell className="w-5 h-5 text-blue-500" />
             <h3 className="text-lg font-semibold text-gray-900">Ближайшие платежи</h3>
+            <button
+              onClick={() => onTabChange?.('reminders')}
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors ml-auto"
+              title="Все напоминания"
+            >
+              <ArrowRight className="w-5 h-5 text-gray-400 hover:text-blue-500" />
+            </button>
           </div>
           <div className="space-y-3">
             {upcoming_reminders && upcoming_reminders.length > 0 ? (

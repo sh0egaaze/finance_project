@@ -211,3 +211,43 @@ async def delete_reminder(
     db.commit()
     
     return {"message": "Напоминание удалено"}
+
+@router.post("/{reminder_id}/complete", response_model=ReminderResponse)
+async def complete_reminder(
+    reminder_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Отметить напоминание как выполненное"""
+    reminder = db.query(Reminder).filter(
+        Reminder.id == reminder_id,
+        Reminder.user_id == current_user.id
+    ).first()
+    
+    if not reminder:
+        raise HTTPException(status_code=404, detail="Напоминание не найдено")
+    
+    reminder.is_completed = True
+    reminder.current_count = (reminder.current_count or 0) + 1
+    reminder.last_sent_date = datetime.now(timezone.utc)
+    reminder.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(reminder)
+    
+    return {
+        "id": reminder.id,
+        "user_id": reminder.user_id,
+        "title": reminder.title,
+        "description": reminder.description,
+        "amount": float(reminder.amount) if reminder.amount else None,
+        "currency": reminder.currency or "RUB",
+        "frequency": reminder.frequency.value if reminder.frequency else "once",
+        "interval_days": reminder.interval_days,
+        "repeat_count": reminder.repeat_count,
+        "current_count": reminder.current_count or 0,
+        "next_reminder_date": reminder.next_reminder_date,
+        "is_active": reminder.is_active,
+        "is_completed": reminder.is_completed,
+        "send_email": reminder.send_email,
+    }
