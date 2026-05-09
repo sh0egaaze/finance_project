@@ -45,6 +45,7 @@ export default function Analytics() {
   const firstDayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
   const [dateFrom, setDateFrom] = useState(firstDayStr);
   const [dateTo, setDateTo] = useState(todayStr);
+  const [showIncome, setShowIncome] = useState(false);
 
   useEffect(() => {
     const loadAnalytics = async () => {
@@ -151,43 +152,84 @@ export default function Analytics() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Bar Chart */}
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Расходы по категориям</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={spendingByCategory}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tickFormatter={(v) => Number(v).toLocaleString('ru-RU')} width={80} />
-              <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Сумма']} />
-              <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
-                {spendingByCategory.map((entry, index) => (
-                  <Cell key={index} fill={entry.fill} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-800">
+              {showIncome ? 'Доходы по категориям' : 'Расходы по категориям'}
+            </h3>
+            <button
+              onClick={() => setShowIncome(!showIncome)}
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              title={showIncome ? 'Показать расходы' : 'Показать доходы'}
+            >
+              <svg className="w-5 h-5 text-gray-400 hover:text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+            </button>
+          </div>
+          {(() => {
+            const chartData = showIncome ? (data.income_by_category || []) : spendingByCategory;
+            return chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tickFormatter={(v) => Number(v).toLocaleString('ru-RU')} width={80} />
+                  <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Сумма']} />
+                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                    {chartData.map((entry: any, index: number) => (
+                      <Cell key={index} fill={entry.fill || entry.color || (showIncome ? '#22c55e' : '#6B7280')} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-gray-400">
+                {showIncome ? 'Нет доходов' : 'Нет расходов'}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Pie Chart */}
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Структура расходов</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={spendingByCategory}
-                dataKey="amount"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-                label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
-              >
-                {spendingByCategory.map((entry, index) => (
-                  <Cell key={index} fill={entry.fill} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value) => [formatCurrency(Number(value))]} />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-800">
+              {showIncome ? 'Структура доходов' : 'Структура расходов'}
+            </h3>
+            <button
+              onClick={() => setShowIncome(!showIncome)}
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              title={showIncome ? 'Показать расходы' : 'Показать доходы'}
+            >
+              <svg className="w-5 h-5 text-gray-400 hover:text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+            </button>
+          </div>
+          {(() => {
+            const chartData = showIncome ? (data.income_by_category || []) : spendingByCategory;
+            const total = chartData.reduce((a: number, b: any) => a + b.amount, 0);
+            return chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    dataKey="amount"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
+                  >
+                    {chartData.map((entry: any, index: number) => (
+                      <Cell key={index} fill={entry.fill || entry.color || (showIncome ? '#22c55e' : '#6B7280')} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [formatCurrency(Number(value))]} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-gray-400">
+                {showIncome ? 'Нет доходов' : 'Нет расходов'}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -213,24 +255,42 @@ export default function Analytics() {
 
       {/* Category Details */}
       <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Детали по категориям</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">
+            {showIncome ? 'Детали по доходам' : 'Детали по расходам'}
+          </h3>
+          <button
+            onClick={() => setShowIncome(!showIncome)}
+            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+            title={showIncome ? 'Показать расходы' : 'Показать доходы'}
+          >
+            <svg className="w-5 h-5 text-gray-400 hover:text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+          </button>
+        </div>
         <div className="space-y-3">
-          {spendingByCategory.sort((a, b) => b.amount - a.amount).map((item) => {
-            const percentage = totalSpending > 0 ? (item.amount / totalSpending) * 100 : 0;
+          {(() => {
+            const detailData = showIncome 
+              ? (data.income_by_category || []).sort((a: any, b: any) => b.amount - a.amount)
+              : spendingByCategory.sort((a, b) => b.amount - a.amount);
+            const detailTotal = detailData.reduce((a: number, b: any) => a + b.amount, 0);
+            
+            return detailData.map((item: any) => {
+              const percentage = detailTotal > 0 ? (item.amount / detailTotal) * 100 : 0;
             return (
-              <div key={item.category_id} className="flex items-center gap-4">
-                <div 
-                  className="w-4 h-4 rounded-full" 
-                  style={{ backgroundColor: item.fill }}
-                />
-                <span className="flex-1 text-gray-700">{item.name}</span>
-                <span className="text-gray-500">{percentage.toFixed(1)}%</span>
-                <span className="font-semibold text-gray-800 w-28 text-right">
-                  {formatCurrency(item.amount)}
-                </span>
-              </div>
-            );
-          })}
+                <div key={item.category_id || item.name} className="flex items-center gap-4">
+                  <div 
+                    className="w-4 h-4 rounded-full" 
+                    style={{ backgroundColor: item.fill || item.color || (showIncome ? '#22c55e' : '#6B7280') }}
+                  />
+                  <span className="flex-1 text-gray-700">{item.name}</span>
+                  <span className="text-gray-500">{percentage.toFixed(1)}%</span>
+                  <span className="font-semibold text-gray-800 w-28 text-right">
+                    {formatCurrency(item.amount)}
+                  </span>
+                </div>
+              );
+            });
+          })()}
         </div>
       </div>
     </div>

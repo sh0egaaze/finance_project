@@ -175,6 +175,13 @@ export interface AnalyticsData {
     amount: number;
     color: string;
   }>;
+  income_by_category: Array<{
+    category_id: number;
+    category: string;
+    name: string;
+    amount: number;
+    color: string;
+  }>;
   spending_by_day: Array<{
     day: string;
     amount: number;
@@ -195,6 +202,8 @@ export interface AnalyticsData {
   }>;
   average_transaction: number;
   total_transactions: number;
+  total_expense: number;
+  total_income: number;
 }
 
 export interface PredictionsData {

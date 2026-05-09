@@ -219,8 +219,10 @@ async def smart_input(
     
     # 2. Категоризация (умная модель загружена)
     category_id = None
-    if categorizer and parsed.get("description"):
+    if categorizer and parsed.get("description"): 
         cat_pred = categorize(parsed["description"])
+        if cat_pred.category_code in ("salary", "cash"):
+            parsed["is_income"] = True
         db_cat = db.query(Category).filter(
             Category.code == cat_pred.category_code,
             Category.user_id == user.id
@@ -263,12 +265,17 @@ async def smart_input_confirm(
 
     # 2. Категоризация
     category_id = None
+    cat_pred = None
     if categorizer and description:
         cat_pred = categorize(description)
         db_cat = db.query(Category).filter(
             Category.code == cat_pred.category_code,
+            Category.user_id == user.id,
         ).first()
         category_id = db_cat.id if db_cat else None
+
+    if cat_pred and cat_pred.category_code in ("salary", "cash"):
+        is_income = True
 
     # 3. Создание транзакции
     tx = Transaction(

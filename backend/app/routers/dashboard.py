@@ -291,8 +291,33 @@ async def get_analytics(
     transaction_count = len([t for t in transactions if t.amount < 0])
     average_transaction = total_expense / transaction_count if transaction_count > 0 else 0
     
+    # Доходы по категориям
+    income_by_category = []
+    income_totals = {}
+    
+    for t in transactions:
+        if t.amount > 0:
+            cat_id = t.category_id or 0
+            cat_name = t.category.name if t.category else "Другой доход"
+            cat_color = t.category.color if t.category else "#22c55e"
+            cat_icon = t.category.icon if t.category else "💰"
+            
+            if cat_id not in income_totals:
+                income_totals[cat_id] = {
+                    "category_id": cat_id,
+                    "category": cat_name,
+                    "name": cat_name,
+                    "amount": 0,
+                    "color": cat_color,
+                }
+            income_totals[cat_id]["amount"] += float(t.amount)
+    
+    income_by_category = list(income_totals.values())
+    income_by_category.sort(key=lambda x: x["amount"], reverse=True)
+
     return {
         "spending_by_category": spending_by_category,
+        "income_by_category": income_by_category,
         "spending_by_day": spending_by_day,
         "spending_trend": spending_trend,
         "income_vs_expense": [
