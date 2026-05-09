@@ -150,6 +150,14 @@ export interface DashboardData {
     color: string;
     icon: string;
   }>;
+  income_by_category: Array<{
+    category_id: number;
+    category: string;
+    name: string;
+    amount: number;
+    color: string;
+    icon: string;
+  }>;
   monthly_trend: Array<{
     date: string;
     income: number;

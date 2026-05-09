@@ -12,12 +12,14 @@ import { SmartInput } from './SmartInput';
 
 interface DashboardProps {
   user: User;
+  onTabChange?: (tab: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showIncome, setShowIncome] = useState(false);
 
   const loadDashboard = async () => {
     try {
@@ -201,16 +203,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Категории */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Расходы по категориям</h3>
-          {spending_by_category && spending_by_category.length > 0 ? (
+      {/* Категории */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">
+            {showIncome ? 'Доходы по категориям' : 'Расходы по категориям'}
+          </h3>
+          <button
+            onClick={() => setShowIncome(!showIncome)}
+            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+            title={showIncome ? 'Показать расходы' : 'Показать доходы'}
+          >
+            <ArrowRight className={`w-5 h-5 transition-colors ${showIncome ? 'text-green-500' : 'text-red-500'}`} />
+          </button>
+        </div>
+        {(() => {
+          const categoryData = showIncome 
+            ? (data.income_by_category || []) 
+            : (spending_by_category || []);
+          
+          return categoryData.length > 0 ? (
             <div className="flex items-center gap-4">
               <ResponsiveContainer width="50%" height={200}>
                 <PieChart>
                   <Pie
-                    data={spending_by_category}
+                    data={categoryData}
                     dataKey="amount"
                     nameKey="name"
                     cx="50%"
@@ -218,20 +237,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     innerRadius={50}
                     outerRadius={80}
                   >
-                    {spending_by_category.map((entry, index) => (
-                      <Cell key={index} fill={entry.color || '#6B7280'} />
+                    {categoryData.map((entry: any, index: number) => (
+                      <Cell key={index} fill={entry.color || (showIncome ? '#22c55e' : '#6B7280')} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => [`${Number(value).toLocaleString('ru-RU')} ₽`]} />
+                  <Tooltip formatter={(value: any) => [`${Number(value).toLocaleString('ru-RU')} ₽`]} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex-1 space-y-2">
-                {spending_by_category.slice(0, 5).map((cat) => (
-                  <div key={cat.category} className="flex items-center justify-between">
+                {categoryData.slice(0, 5).map((cat: any) => (
+                  <div key={cat.category || cat.name} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div
                         className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: cat.color || '#6B7280' }}
+                        style={{ backgroundColor: cat.color || (showIncome ? '#22c55e' : '#6B7280') }}
                       />
                       <span className="text-sm text-gray-600">{cat.name}</span>
                     </div>
@@ -244,11 +263,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             </div>
           ) : (
             <div className="h-[200px] flex items-center justify-center text-gray-400">
-              Нет данных для отображения
+              {showIncome ? 'Нет доходов' : 'Нет расходов'}
             </div>
-          )}
-        </div>
-      </div>
+          );
+        })()}
+      </div>  
 
       {/* Нижняя секция */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -256,7 +275,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Последние операции</h3>
-            <ArrowRight className="w-5 h-5 text-gray-400" />
+            <button
+              onClick={() => onTabChange?.('transactions')}
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Все транзакции"
+            >
+              <ArrowRight className="w-5 h-5 text-gray-400 hover:text-blue-500" />
+            </button>
           </div>
           <div className="space-y-3">
             {recent_transactions && recent_transactions.length > 0 ? (

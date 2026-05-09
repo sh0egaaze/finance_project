@@ -116,7 +116,7 @@ export default function App() {
 
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard user={user} />;
+        return <Dashboard user={user} onTabChange={setActiveTab} />;
       case 'transactions':
         return <Transactions categories={categories} />;
       case 'analytics':

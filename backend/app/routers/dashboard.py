@@ -83,6 +83,58 @@ async def get_dashboard(
             })
     
     spending_by_category.sort(key=lambda x: x["amount"], reverse=True)
+
+    # Тренд по дням за месяц
+    monthly_trend = []
+    trend_by_day = {}
+    for t in transactions:
+        day = t.transaction_date.strftime("%Y-%m-%d")
+        if day not in trend_by_day:
+            trend_by_day[day] = {"date": day, "income": 0, "expense": 0}
+        if t.amount > 0:
+            trend_by_day[day]["income"] += float(t.amount)
+        else:
+            trend_by_day[day]["expense"] += abs(float(t.amount))
+    
+    monthly_trend = [v for k, v in sorted(trend_by_day.items())]
+
+    # Доходы по категориям
+    income_by_category = []
+    income_categories = db.query(Category).filter(Category.is_income == True, Category.is_active == True).all()
+    
+    for cat in income_categories:
+        cat_sum = sum(
+            float(t.amount)
+            for t in transactions
+            if t.category_id == cat.id and t.amount > 0
+        )
+        if cat_sum > 0:
+            income_by_category.append({
+                "category_id": cat.id,
+                "category": cat.name,
+                "name": cat.name,
+                "amount": cat_sum,
+                "color": cat.color or "#22c55e",
+                "icon": cat.icon or "💰",
+            })
+    
+    # Доходы без категории
+    uncategorized_income = sum(
+        float(t.amount)
+        for t in transactions
+        if t.amount > 0 and t.category_id is None
+    )
+    if uncategorized_income > 0:
+        income_by_category.append({
+            "category_id": 0,
+            "category": "Другой доход",
+            "name": "Другой доход",
+            "amount": uncategorized_income,
+            "color": "#27AE60",
+            "icon": "💵",
+        })
+    
+    income_by_category.sort(key=lambda x: x["amount"], reverse=True)
     
     # Ближайшие напоминания
     reminders = db.query(Reminder).filter(
@@ -121,9 +173,10 @@ async def get_dashboard(
             }
             for item in spending_by_category
         ],
-        "monthly_trend": [],
+        "monthly_trend": monthly_trend,
         "upcoming_reminders": upcoming_reminders,
         "suspicious_transactions": [],
+        "income_by_category": income_by_category,
     }
 
 
