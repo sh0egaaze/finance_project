@@ -52,10 +52,12 @@ async def process_reminders():
                 
                 if rem.send_email:
                     try:
-                        await email_service.send_reminder_notification(target_email, rem)
-                        success = True
+                        success = await email_service.send_reminder_notification(target_email, rem)
+                        if not success:
+                            error_msg = "Не удалось отправить email"
                     except Exception as e:
                         error_msg = str(e)
+                        success = False
                 
                 # Сохраняем в историю
                 history = NotificationHistory(
