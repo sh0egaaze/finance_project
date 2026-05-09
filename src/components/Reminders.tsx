@@ -30,13 +30,14 @@ export default function Reminders() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState<ReminderCreate>({
+    const [formData, setFormData] = useState<ReminderCreate>({
     title: '',
     description: '',
     amount: undefined,
     frequency: 'once',
     next_reminder_date: new Date().toISOString().split('T')[0],
   });
+  const [reminderTime, setReminderTime] = useState('09:00');
 
   const loadReminders = async () => {
     try {
@@ -56,9 +57,10 @@ export default function Reminders() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const dateWithTime = new Date(`${formData.next_reminder_date}T${reminderTime}:00`);
       await api.createReminder({
         ...formData,
-        next_reminder_date: new Date(formData.next_reminder_date).toISOString(),
+        next_reminder_date: dateWithTime.toISOString(),
       });
       setShowForm(false);
       setFormData({
@@ -68,11 +70,7 @@ export default function Reminders() {
         frequency: 'once',
         next_reminder_date: new Date().toISOString().split('T')[0],
       });
-      loadReminders();
-    } catch (error) {
-      console.error('Error creating reminder:', error);
-    }
-  };
+      setReminderTime('09:00');
 
   const handleDelete = async (id: number) => {
     if (!confirm('Удалить напоминание?')) return;
@@ -116,8 +114,9 @@ export default function Reminders() {
 
       {/* Add Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowForm(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-semibold text-gray-800 mb-4">Новое напоминание</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -192,17 +191,31 @@ export default function Reminders() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Дата напоминания
-                </label>
-                <input
-                  type="date"
-                  value={formData.next_reminder_date}
-                  onChange={(e) => setFormData({ ...formData, next_reminder_date: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Дата
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.next_reminder_date}
+                    onChange={(e) => setFormData({ ...formData, next_reminder_date: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Время
+                  </label>
+                  <input
+                    type="time"
+                    value={reminderTime}
+                    onChange={(e) => setReminderTime(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
@@ -221,6 +234,7 @@ export default function Reminders() {
                 </button>
               </div>
             </form>
+          </div>
           </div>
         </div>
       )}
@@ -261,6 +275,8 @@ export default function Reminders() {
                       <span className="flex items-center gap-1">
                         <Calendar className="w-4 h-4" />
                         {formatDate(reminder.next_reminder_date)}
+                        {' '}
+                        {new Date(reminder.next_reminder_date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-4 h-4" />
