@@ -21,6 +21,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Check auth on mount
   useEffect(() => {
@@ -72,8 +73,7 @@ export default function App() {
   };
 
   const refreshData = useCallback(() => {
-    // Trigger refresh in child components by changing a key
-    setActiveTab(prev => prev);
+    setActiveTab(prev => prev + 1);
   }, []);
 
   const handleAddTransaction = async (data: {
@@ -116,21 +116,21 @@ export default function App() {
 
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard user={user} onTabChange={setActiveTab} />;
+        return <Dashboard key={refreshKey} user={user} onTabChange={setActiveTab} />;
       case 'transactions':
-        return <Transactions categories={categories} />;
+        return <Transactions key={refreshKey} categories={categories} />;
       case 'analytics':
-        return <Analytics />;
+        return <Analytics key={refreshKey} />;
       case 'reminders':
-        return <Reminders />;
+        return <Reminders key={refreshKey} />;
       case 'currency':
         return <CurrencyRates />;
       case 'predictions':
-        return <Predictions />;
+        return <Predictions key={refreshKey} />;
       case 'suspicious':
-        return <SuspiciousTransactions />;
+        return <SuspiciousTransactions key={refreshKey} />;
       case 'tips':
-        return <SavingTips />;
+        return <SavingTips key={refreshKey} />;
       case 'settings':
         return <Settings user={user} onLogout={handleLogout} onUserUpdate={setUser} />;
       default:
