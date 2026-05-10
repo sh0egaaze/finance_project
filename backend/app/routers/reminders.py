@@ -89,6 +89,36 @@ async def get_reminders(
         })
     return result
 
+@router.get("/archive", response_model=List[ReminderResponse])
+async def get_archived_reminders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Получить архивные (завершённые) напоминания"""
+    reminders = db.query(Reminder).filter(
+        Reminder.user_id == current_user.id,
+        Reminder.is_completed == True
+    ).order_by(Reminder.next_reminder_date.desc()).all()
+    
+    result = []
+    for r in reminders:
+        result.append({
+            "id": r.id,
+            "user_id": r.user_id,
+            "title": r.title,
+            "description": r.description,
+            "amount": float(r.amount) if r.amount else None,
+            "currency": r.currency or "RUB",
+            "frequency": r.frequency.value if r.frequency else "once",
+            "interval_days": r.interval_days,
+            "repeat_count": r.repeat_count,
+            "current_count": r.current_count or 0,
+            "next_reminder_date": r.next_reminder_date,
+            "is_active": r.is_active,
+            "is_completed": r.is_completed,
+            "send_email": r.send_email,
+        })
+    return result
 
 @router.post("", response_model=ReminderResponse)
 async def create_reminder(

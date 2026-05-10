@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Bell, Trash2, Check, Clock, Calendar, Edit2 } from 'lucide-react';
+import { Plus, Bell, Trash2, Check, Clock, Calendar, Edit2, ChevronDown, Archive } from 'lucide-react';
 import { api, Reminder, ReminderCreate } from '../api';
 
 const formatCurrency = (value: number) => {
@@ -42,6 +42,9 @@ export default function Reminders() {
       })(),
   });
   const [reminderTime, setReminderTime] = useState('09:00');
+  const [archivedReminders, setArchivedReminders] = useState<Reminder[]>([]);
+  const [showArchive, setShowArchive] = useState(false);
+  const [archiveLoaded, setArchiveLoaded] = useState(false);
 
   const loadReminders = async () => {
     try {
@@ -52,6 +55,23 @@ export default function Reminders() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const loadArchive = async () => {
+    try {
+      const data = await api.getArchivedReminders();
+      setArchivedReminders(data);
+      setArchiveLoaded(true);
+    } catch (error) {
+      console.error('Error loading archive:', error);
+    }
+  };
+
+  const toggleArchive = () => {
+    if (!showArchive && !archiveLoaded) {
+      loadArchive();
+    }
+    setShowArchive(!showArchive);
   };
 
   useEffect(() => {
@@ -122,6 +142,7 @@ export default function Reminders() {
     try {
       await api.deleteReminder(id);
       loadReminders();
+      if (archiveLoaded) loadArchive();
     } catch (error) {
       console.error('Error deleting reminder:', error);
     }
@@ -131,6 +152,7 @@ export default function Reminders() {
     try {
       await api.completeReminder(id);
       loadReminders();
+      if (archiveLoaded) loadArchive();
     } catch (error) {
       console.error('Error completing reminder:', error);
     }
@@ -358,6 +380,73 @@ export default function Reminders() {
           ))}
         </div>
       )}
+      {/* Архив напоминаний */}
+      <div className="mt-6">
+        <button
+          onClick={toggleArchive}
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          <Archive className="w-5 h-5" />
+          <span className="font-medium">Архив напоминаний</span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showArchive ? 'rotate-180' : ''}`} />
+          {archiveLoaded && (
+            <span className="text-sm text-gray-400">({archivedReminders.length})</span>
+          )}
+        </button>
+
+        {showArchive && (
+          <div className="mt-4 space-y-3">
+            {archivedReminders.length === 0 ? (
+              <p className="text-gray-400 text-sm pl-7">Нет архивных напоминаний</p>
+            ) : (
+              archivedReminders.map((reminder) => (
+                <div
+                  key={reminder.id}
+                  className="bg-gray-50 rounded-xl border border-gray-200 p-4 opacity-70"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-green-100">
+                        <Check className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-gray-600">{reminder.title}</h3>
+                        {reminder.description && (
+                          <p className="text-gray-400 text-sm mt-1">{reminder.description}</p>
+                        )}
+                        <div className="flex items-center gap-4 mt-1 text-xs text-gray-400">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {formatDate(reminder.next_reminder_date)}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {FREQUENCY_LABELS[reminder.frequency] || reminder.frequency}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {reminder.amount && (
+                        <span className="text-lg font-semibold text-gray-500">
+                          {formatCurrency(reminder.amount)}
+                        </span>
+                      )}
+                      <button
+                        onClick={() => handleDelete(reminder.id)}
+                        className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Удалить"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

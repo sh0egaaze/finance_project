@@ -391,6 +391,11 @@ class ApiClient {
     return response.data;
   }
 
+  async getArchivedReminders(): Promise<Reminder[]> {
+    const response = await axiosInstance.get('/reminders/archive');
+    return response.data;
+  }
+
   async createReminder(data: ReminderCreate): Promise<Reminder> {
     const response = await axiosInstance.post('/reminders', data);
     return response.data;
