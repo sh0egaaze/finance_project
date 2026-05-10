@@ -17,6 +17,10 @@ const chartStyles = {
   itemStyle: { color: '#F9FAFB' },
 };
 
+const shortenName = (name: string, maxLen: number = 16) => {
+  return name.length > maxLen ? name.substring(0, maxLen) + '…' : name;
+};
+
 export default function Analytics() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,7 +79,6 @@ export default function Analytics() {
   const totalSpending = spendingByCategory.reduce((a, b) => a + b.amount, 0);
   const totalIncomeCalc = incomeByCategory.reduce((a: number, b: any) => a + b.amount, 0);
 
-  // Данные для текущего режима (расходы или доходы)
   const currentChartData = showIncome ? incomeByCategory : spendingByCategory;
   const currentTotal = showIncome ? totalIncomeCalc : totalSpending;
 
@@ -90,11 +93,6 @@ export default function Analytics() {
       </div>
     );
   }
-
-  // Сокращение длинных названий для оси X
-  const shortenName = (name: string, maxLen: number = 10) => {
-    return name.length > maxLen ? name.substring(0, maxLen) + '…' : name;
-  };
 
   return (
     <div className="space-y-6">
@@ -143,16 +141,13 @@ export default function Analytics() {
           </div>
           {currentChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={currentChartData} margin={{ bottom: 60 }}>
+              <BarChart data={currentChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                 <XAxis
                   dataKey="name"
                   tick={chartStyles.tick}
-                  tickFormatter={(name) => shortenName(name, 8)}
-                  angle={-45}
-                  textAnchor="end"
+                  tickFormatter={(name) => shortenName(name)}
                   interval={0}
-                  height={60}
                 />
                 <YAxis tickFormatter={(v) => Number(v).toLocaleString('ru-RU')} width={70} tick={chartStyles.tick} />
                 <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Сумма']} contentStyle={chartStyles.tooltip} itemStyle={chartStyles.itemStyle} labelStyle={chartStyles.itemStyle} />
@@ -188,7 +183,6 @@ export default function Analytics() {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    innerRadius={50}
                     outerRadius={90}
                   >
                     {currentChartData.map((entry: any, index: number) => (
@@ -203,11 +197,11 @@ export default function Analytics() {
                   const percentage = currentTotal > 0 ? (cat.amount / currentTotal) * 100 : 0;
                   return (
                     <div key={cat.category_id || cat.name} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: cat.fill || cat.color || (showIncome ? '#22c55e' : '#6B7280') }} />
-                        <span className="text-sm text-gray-600 dark:text-gray-300 truncate max-w-[120px]">{cat.name}</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-300 truncate">{cat.name}</span>
                       </div>
-                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400 ml-2">{percentage.toFixed(1)}%</span>
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400 ml-2 shrink-0">{percentage.toFixed(1)}%</span>
                     </div>
                   );
                 })}
