@@ -532,10 +532,27 @@ async def get_saving_tips(
     tip_id = 1
     
     CATEGORY_MAP = {
-        "food": "groceries", "restaurants": "restaurants", "transport": "transport",
-        "shopping": "shopping", "utilities": "utilities", "health": "health",
-        "entertainment": "entertainment", "education": "education",
+        "food": "groceries",
+        "restaurants": "restaurants",
+        "transport": "transport",
+        "housing": "utilities",
+        "shopping": "shopping",
+        "health": "health",
+        "entertainment": "entertainment",
+        "education": "education",
         "subscriptions": "subscriptions",
+        "beauty": "shopping",
+        "sports": "health",
+        "telecom": "subscriptions",
+        "insurance": "utilities",
+        "taxes": "utilities",
+        "travel": "entertainment",
+        "pets": "shopping",
+        "charity": "shopping",
+        "cash": "shopping",
+        "other": "shopping",
+        "salary": "income",
+        "transfers": "utilities",
     }
     
     recommender = registry.get("recommender")
