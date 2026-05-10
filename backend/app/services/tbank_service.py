@@ -7,6 +7,10 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import httpx
 from loguru import logger
+from ..ml.anomaly_detector import detect_anomaly
+from sqlalchemy import func as sql_func
+from ..models import Transaction, Category
+from ..ml.categorizer import categorize
 
 from ..config import get_settings
 
@@ -152,16 +156,13 @@ class TBankService:
         Синхронизировать операции из Т-Банк API в транзакции приложения.
         Возвращает количество добавленных транзакций.
         """
-        from ..models import Transaction, Category
-        from ..ml.categorizer import MLCategorizer
-        
+
         # Получаем операции
         operations = await self.get_operations(days)
         
         if not operations:
             return 0
         
-        categorizer = MLCategorizer()
         new_count = 0
         
         # Получаем категории для маппинга
@@ -194,9 +195,9 @@ class TBankService:
             description = op.get("description", "") or op.get("name", "") or "Операция Т-Банк"
             
             # Определяем категорию через ML
-            cat_result = categorizer.predict(description)
-            category_code = cat_result.get("category", "other")
-            confidence = Decimal(str(cat_result.get("confidence", 0.5)))
+            cat_result = categorize(description)
+            category_code = cat_result.category_code
+            confidence = Decimal(str(cat_result.confidence))
             
             category = categories.get(category_code) or categories.get("other")
             
@@ -222,9 +223,6 @@ class TBankService:
             
             # Проверка на подозрительность
             try:
-                from ..ml.anomaly_detector import detect_anomaly
-                from sqlalchemy import func as sql_func
-                
                 abs_amount = abs(float(amount))
                 hour = transaction_date.hour
                 day_of_week = transaction_date.weekday()
