@@ -194,10 +194,35 @@ class TBankService:
             
             description = op.get("description", "") or op.get("name", "") or "Операция Т-Банк"
             
-            # Определяем категорию через ML
-            cat_result = categorize(description)
-            category_code = cat_result.category_code
-            confidence = Decimal(str(cat_result.confidence))
+            # Определяем тип операции Т-Банк
+            op_type = op.get("operationType", "")
+            op_state = op.get("state", "")
+            
+            # Для инвестиционных операций — категория "Другое" или "Переводы"
+            if op_type in ("OPERATION_TYPE_BUY", "OPERATION_TYPE_SELL", 
+                           "OPERATION_TYPE_BROKER_FEE", "OPERATION_TYPE_INPUT",
+                           "OPERATION_TYPE_OUTPUT"):
+                if op_type == "OPERATION_TYPE_BUY":
+                    description = f"Покупка: {op.get('name', '') or op.get('description', 'ценные бумаги')}"
+                    category_code = "shopping"
+                elif op_type == "OPERATION_TYPE_SELL":
+                    description = f"Продажа: {op.get('name', '') or op.get('description', 'ценные бумаги')}"
+                    category_code = "salary"
+                elif op_type == "OPERATION_TYPE_BROKER_FEE":
+                    description = f"Комиссия брокера"
+                    category_code = "other"
+                elif op_type == "OPERATION_TYPE_INPUT":
+                    description = f"Пополнение брокерского счёта"
+                    category_code = "transfers"
+                elif op_type == "OPERATION_TYPE_OUTPUT":
+                    description = f"Вывод с брокерского счёта"
+                    category_code = "transfers"
+                confidence = Decimal("0.95")
+            else:
+                # Для остальных — пробуем ML
+                cat_result = categorize(description)
+                category_code = cat_result.category_code
+                confidence = Decimal(str(cat_result.confidence))
             
             category = categories.get(category_code) or categories.get("other")
             

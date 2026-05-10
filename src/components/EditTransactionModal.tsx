@@ -146,7 +146,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 .filter((c) => (isExpense ? c.is_expense : c.is_income))
                 .map((cat) => (
                   <option key={cat.id} value={cat.id}>
-                    {cat.name}
+                    {cat.icon} {cat.name}
                   </option>
                 ))}
             </select>
