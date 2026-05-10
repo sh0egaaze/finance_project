@@ -23,6 +23,16 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  useEffect(() => {
+    const theme = localStorage.getItem('theme') || 'system';
+    const root = document.documentElement;
+    if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, []);
+
   // Check auth on mount
   useEffect(() => {
     const checkAuth = async () => {
@@ -139,7 +149,7 @@ export default function App() {
   };
 
       return (
-    <div className="h-screen bg-gray-50 flex overflow-hidden">
+    <div className="h-screen bg-gray-50 dark:bg-gray-900 flex overflow-hidden">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       
       <div className="flex-1 flex flex-col min-w-0">

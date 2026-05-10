@@ -6,8 +6,6 @@ export default function CurrencyRates() {
   const [data, setData] = useState<CurrencyRatesData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Converter state
   const [amount, setAmount] = useState<string>('1000');
   const [fromCurrency, setFromCurrency] = useState('RUB');
   const [toCurrency, setToCurrency] = useState('USD');
@@ -21,7 +19,6 @@ export default function CurrencyRates() {
       setData(rates);
     } catch (err) {
       console.error('Error loading currency rates:', err);
-      // Use fallback data
       setData({
         base: 'RUB',
         date: new Date().toISOString(),
@@ -43,16 +40,13 @@ export default function CurrencyRates() {
 
   const handleConvert = async () => {
     if (!amount || !data) return;
-    
     try {
       const result = await api.convertCurrency(Number(amount), fromCurrency, toCurrency);
       setConvertedAmount(result.result);
     } catch {
-      // Calculate locally
       const fromRate = fromCurrency === 'RUB' ? 1 : (data.rates.find(r => r.currency === fromCurrency)?.rate || 1);
       const toRate = toCurrency === 'RUB' ? 1 : (data.rates.find(r => r.currency === toCurrency)?.rate || 1);
-      const result = Number(amount) * fromRate / toRate;
-      setConvertedAmount(result);
+      setConvertedAmount(Number(amount) * fromRate / toRate);
     }
   };
 
@@ -62,21 +56,24 @@ export default function CurrencyRates() {
     setConvertedAmount(null);
   };
 
+  const cardClass = "bg-white rounded-xl shadow-sm p-6 dark:bg-gray-800";
+  const inputClass = "flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400";
+  const selectClass = "px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white";
+  const labelClass = "block text-sm text-gray-500 mb-1 dark:text-gray-400";
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400"></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 text-red-600 p-4 rounded-lg">
+      <div className="bg-red-50 text-red-600 p-4 rounded-lg dark:bg-red-900/30 dark:text-red-400">
         {error}
-        <button onClick={loadRates} className="ml-4 underline">
-          Попробовать снова
-        </button>
+        <button onClick={loadRates} className="ml-4 underline">Попробовать снова</button>
       </div>
     );
   }
@@ -87,7 +84,7 @@ export default function CurrencyRates() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-800">Курсы валют</h2>
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Курсы валют</h2>
         <button
           onClick={loadRates}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -100,86 +97,65 @@ export default function CurrencyRates() {
       {/* Currency Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {rates.map((rate) => (
-          <div key={rate.currency} className="bg-white rounded-xl shadow-sm p-6">
+          <div key={rate.currency} className={cardClass}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-2xl">{rate.flag}</span>
-              <span className={`flex items-center gap-1 text-sm ${
-                rate.change >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
+              <span className={`flex items-center gap-1 text-sm ${rate.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {rate.change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                 {rate.change >= 0 ? '+' : ''}{rate.change.toFixed(2)}%
               </span>
             </div>
-            <div className="text-sm text-gray-500">{rate.name}</div>
-            <div className="text-2xl font-bold text-gray-800 mt-1">
-              {rate.rate.toFixed(2)} ₽
-            </div>
-            <div className="text-sm text-gray-400">1 {rate.currency}</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">{rate.name}</div>
+            <div className="text-2xl font-bold text-gray-800 mt-1 dark:text-white">{rate.rate.toFixed(2)} ₽</div>
+            <div className="text-sm text-gray-400 dark:text-gray-500">1 {rate.currency}</div>
           </div>
         ))}
       </div>
 
       {/* Converter */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Конвертер валют</h3>
-        
+      <div className={cardClass}>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4 dark:text-white">Конвертер валют</h3>
         <div className="flex flex-col md:flex-row items-center gap-4">
           <div className="flex-1 w-full">
-            <label className="block text-sm text-gray-500 mb-1">У меня есть</label>
+            <label className={labelClass}>У меня есть</label>
             <div className="flex gap-2">
               <input
                 type="number"
                 value={amount}
-                onChange={(e) => {
-                  setAmount(e.target.value);
-                  setConvertedAmount(null);
-                }}
-                className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => { setAmount(e.target.value); setConvertedAmount(null); }}
+                className={inputClass}
                 placeholder="Сумма"
               />
               <select
                 value={fromCurrency}
-                onChange={(e) => {
-                  setFromCurrency(e.target.value);
-                  setConvertedAmount(null);
-                }}
-                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => { setFromCurrency(e.target.value); setConvertedAmount(null); }}
+                className={selectClass}
               >
-                {currencies.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
+                {currencies.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
 
-          <button
-            onClick={swapCurrencies}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          >
+          <button onClick={swapCurrencies} className="p-2 hover:bg-gray-100 rounded-full transition-colors dark:hover:bg-gray-700">
             <ArrowRightLeft className="w-6 h-6 text-gray-400" />
           </button>
 
           <div className="flex-1 w-full">
-            <label className="block text-sm text-gray-500 mb-1">Получу</label>
+            <label className={labelClass}>Получу</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={convertedAmount !== null ? convertedAmount.toFixed(2) : ''}
                 readOnly
-                className="flex-1 px-4 py-2 border rounded-lg bg-gray-50"
+                className="flex-1 px-4 py-2 border rounded-lg bg-gray-50 dark:bg-gray-600 dark:border-gray-600 dark:text-white"
                 placeholder="Результат"
               />
               <select
                 value={toCurrency}
-                onChange={(e) => {
-                  setToCurrency(e.target.value);
-                  setConvertedAmount(null);
-                }}
-                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => { setToCurrency(e.target.value); setConvertedAmount(null); }}
+                className={selectClass}
               >
-                {currencies.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
+                {currencies.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
@@ -195,7 +171,7 @@ export default function CurrencyRates() {
 
       {/* Last Update */}
       {data && (
-        <p className="text-sm text-gray-400 text-center">
+        <p className="text-sm text-gray-400 text-center dark:text-gray-500">
           Обновлено: {new Date(data.date).toLocaleString('ru-RU')}
         </p>
       )}

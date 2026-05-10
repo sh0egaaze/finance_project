@@ -22,13 +22,16 @@ const menuItems = [
 
 export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0 shrink-0">
+    <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen sticky top-0 shrink-0">
       {/* Логотип */}
-      <div className="p-5 border-b border-gray-100">
+      <div className="px-5 py-[13px] border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
+            <span className="text-white text-lg">💰</span>
+          </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900">FinanceApp</h1>
-            <p className="text-xs text-gray-400">Управление финансами</p>
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">FinanceApp</h1>
+            <p className="text-xs text-gray-400 dark:text-gray-500">Управление финансами</p>
           </div>
         </div>
       </div>
@@ -38,18 +41,17 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
-
           return (
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium ${
                 isActive
-                  ? 'bg-blue-50 text-blue-600 shadow-sm'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                  ? 'bg-blue-50 text-blue-600 shadow-sm dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-300'
               }`}
             >
-              <Icon className={`w-5 h-5 ${isActive ? 'text-blue-500' : 'text-gray-400'}`} />
+              <Icon className={`w-5 h-5 ${isActive ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`} />
               {item.label}
             </button>
           );
@@ -57,8 +59,8 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       </nav>
 
       {/* Версия */}
-      <div className="p-4 border-t border-gray-100">
-        <p className="text-xs text-gray-300 text-center">v1.0.0</p>
+      <div className="p-4 border-t border-gray-100 dark:border-gray-700">
+        <p className="text-xs text-gray-300 text-center dark:text-gray-600">v1.0.0</p>
       </div>
     </aside>
   );

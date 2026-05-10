@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --tbank-yellow: #FFDD2D;
   --tbank-black: #333333;

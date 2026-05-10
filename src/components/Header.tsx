@@ -1,4 +1,4 @@
-import { Plus, LogOut, User as UserIcon } from 'lucide-react';
+import { Plus, LogOut } from 'lucide-react';
 import { User } from '../api';
 
 interface HeaderProps {
@@ -9,13 +9,13 @@ interface HeaderProps {
 
 export default function Header({ user, onLogout, onAddTransaction }: HeaderProps) {
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-30 shrink-0">
+    <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-[13px] sticky top-0 z-30 shrink-0">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-800">
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
             {user?.full_name || 'Пользователь'}
           </h2>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-400 dark:text-gray-500">
             {new Date().toLocaleDateString('ru-RU', {
               weekday: 'long',
               year: 'numeric',
@@ -34,17 +34,14 @@ export default function Header({ user, onLogout, onAddTransaction }: HeaderProps
             Добавить
           </button>
 
-          <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
-            <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center shadow-sm">
-              <UserIcon className="w-4 h-4 text-white" />
-            </div>
+          <div className="flex items-center gap-3 pl-3 border-l border-gray-200 dark:border-gray-700">
             <div className="hidden md:block">
-              <p className="text-sm font-medium text-gray-700">{user?.full_name}</p>
-              <p className="text-xs text-gray-400">{user?.email}</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{user?.full_name}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{user?.email}</p>
             </div>
             <button
               onClick={onLogout}
-              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors dark:hover:bg-red-900/20"
               title="Выйти"
             >
               <LogOut className="w-4 h-4" />

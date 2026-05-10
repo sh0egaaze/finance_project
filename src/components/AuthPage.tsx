@@ -19,7 +19,6 @@ export default function AuthPage({ onLogin, onRegister }: AuthPageProps) {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
-
     try {
       if (isLogin) {
         await onLogin(email, password);
@@ -36,6 +35,9 @@ export default function AuthPage({ onLogin, onRegister }: AuthPageProps) {
     }
   };
 
+  const inputClass = "w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400";
+  const labelClass = "block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -49,13 +51,13 @@ export default function AuthPage({ onLogin, onRegister }: AuthPageProps) {
         </div>
 
         {/* Form Card */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <h2 className="text-2xl font-bold text-gray-800 text-center mb-6">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 dark:bg-gray-800">
+          <h2 className="text-2xl font-bold text-gray-800 text-center mb-6 dark:text-white">
             {isLogin ? 'Вход в аккаунт' : 'Регистрация'}
           </h2>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm dark:bg-red-900/30 dark:border-red-700 dark:text-red-400">
               {error}
             </div>
           )}
@@ -63,16 +65,14 @@ export default function AuthPage({ onLogin, onRegister }: AuthPageProps) {
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Имя
-                </label>
+                <label className={labelClass}>Имя</label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={inputClass}
                     placeholder="Ваше имя"
                   />
                 </div>
@@ -80,16 +80,14 @@ export default function AuthPage({ onLogin, onRegister }: AuthPageProps) {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
+              <label className={labelClass}>Email</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={inputClass}
                   placeholder="example@mail.ru"
                   required
                 />
@@ -97,16 +95,14 @@ export default function AuthPage({ onLogin, onRegister }: AuthPageProps) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Пароль
-              </label>
+              <label className={labelClass}>Пароль</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                   placeholder="••••••••"
                   required
                   minLength={6}
@@ -114,7 +110,7 @@ export default function AuthPage({ onLogin, onRegister }: AuthPageProps) {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -139,11 +135,8 @@ export default function AuthPage({ onLogin, onRegister }: AuthPageProps) {
 
           <div className="mt-6 text-center">
             <button
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setError(null);
-              }}
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              onClick={() => { setIsLogin(!isLogin); setError(null); }}
+              className="text-blue-600 hover:text-blue-700 font-medium dark:text-blue-400 dark:hover:text-blue-300"
             >
               {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
             </button>

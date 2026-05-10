@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Bell, Shield, Link, Unlink, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
+import { User, Bell, Shield, Link, Unlink, CheckCircle, AlertCircle, LogOut, Sun, Moon, Monitor } from 'lucide-react';
 import { api, User as UserType, TBankStatus } from '../api';
 
 interface SettingsProps {
@@ -8,17 +8,32 @@ interface SettingsProps {
   onUserUpdate?: (user: UserType) => void;
 }
 
-// Компонент для отображения сообщения
 function Message({ message }: { message: { type: 'success' | 'error'; text: string } | null }) {
   if (!message) return null;
   return (
-    <div className={`p-4 rounded-lg flex items-center gap-2 mb-4 ${
-      message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+    <div className={`p-3 rounded-lg flex items-center gap-2 mb-4 text-sm ${
+      message.type === 'success' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'
     }`}>
-      {message.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+      {message.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
       {message.text}
     </div>
   );
+}
+
+type ThemeMode = 'light' | 'dark' | 'system';
+
+function getStoredTheme(): ThemeMode {
+  return (localStorage.getItem('theme') as ThemeMode) || 'system';
+}
+
+function applyTheme(mode: ThemeMode) {
+  const root = document.documentElement;
+  if (mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    root.classList.add('dark');
+  } else {
+    root.classList.remove('dark');
+  }
+  localStorage.setItem('theme', mode);
 }
 
 export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps) {
@@ -26,19 +41,17 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
   const [emailNotifications, setEmailNotifications] = useState(user.email_notifications);
   const [notificationEmail, setNotificationEmail] = useState(user.notification_email || '');
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Отдельные сообщения для каждого блока
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getStoredTheme);
+
   const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [tbankMessage, setTbankMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [notifyMessage, setNotifyMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  
-  // T-Bank
+
   const [tbankStatus, setTbankStatus] = useState<TBankStatus | null>(null);
   const [tbankToken, setTbankToken] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
-  
-  // Password
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -46,6 +59,20 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
   useEffect(() => {
     loadTBankStatus();
   }, []);
+
+  // Слушаем изменения системной темы
+  useEffect(() => {
+    applyTheme(themeMode);
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => { if (themeMode === 'system') applyTheme('system'); };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [themeMode]);
+
+  const handleThemeChange = (mode: ThemeMode) => {
+    setThemeMode(mode);
+    applyTheme(mode);
+  };
 
   const loadTBankStatus = async () => {
     try {
@@ -65,11 +92,9 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
         email_notifications: emailNotifications,
         notification_email: notificationEmail || undefined,
       });
-      if (onUserUpdate) {
-        onUserUpdate(updatedUser);
-      }
+      if (onUserUpdate) onUserUpdate(updatedUser);
       setProfileMessage({ type: 'success', text: 'Профиль сохранён' });
-    } catch (error) {
+    } catch {
       setProfileMessage({ type: 'error', text: 'Ошибка сохранения' });
     } finally {
       setIsSaving(false);
@@ -84,11 +109,9 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
         email_notifications: emailNotifications,
         notification_email: notificationEmail || undefined,
       });
-      if (onUserUpdate) {
-        onUserUpdate(updatedUser);
-      }
+      if (onUserUpdate) onUserUpdate(updatedUser);
       setNotifyMessage({ type: 'success', text: 'Настройки сохранены' });
-    } catch (error) {
+    } catch {
       setNotifyMessage({ type: 'error', text: 'Ошибка сохранения' });
     } finally {
       setIsSaving(false);
@@ -104,7 +127,6 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
       setPasswordMessage({ type: 'error', text: 'Пароль должен быть минимум 12 символов' });
       return;
     }
-    
     setIsSaving(true);
     setPasswordMessage(null);
     try {
@@ -123,7 +145,6 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
 
   const handleConnectTBank = async () => {
     if (!tbankToken.trim()) return;
-    
     setIsConnecting(true);
     setTbankMessage(null);
     try {
@@ -140,7 +161,6 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
 
   const handleDisconnectTBank = async () => {
     if (!confirm('Отключить Т-Банк?')) return;
-    
     try {
       await api.disconnectTBank();
       setTbankStatus({ connected: false, account_id: null, balance: null, message: 'Т-Банк отключён' });
@@ -150,212 +170,159 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
     }
   };
 
+  const inputClass = "w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400";
+  const cardClass = "bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700";
+  const labelClass = "block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300";
+  const btnPrimary = "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm font-medium";
+
   return (
-    <div className="space-y-6 max-w-2xl">
-      <h2 className="text-2xl font-bold text-gray-800">Настройки</h2>
+    <div className="space-y-6 max-w-3xl mx-auto">
+      <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Настройки</h2>
 
-      {/* Profile */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
+      {/* Тема */}
+      <div className={cardClass}>
         <div className="flex items-center gap-3 mb-4">
-          <User className="w-5 h-5 text-gray-400" />
-          <h3 className="text-lg font-semibold text-gray-800">Профиль</h3>
+          <Sun className="w-5 h-5 text-gray-400" />
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Оформление</h3>
         </div>
-        
-        <Message message={profileMessage} />
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              value={user.email}
-              disabled
-              className="w-full px-4 py-2 border rounded-lg bg-gray-50 text-gray-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Имя</label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Ваше имя"
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <button
-            onClick={handleSaveProfile}
-            disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {isSaving ? 'Сохранение...' : 'Сохранить'}
-          </button>
+        <div className="flex gap-3">
+          {([
+            { mode: 'light' as ThemeMode, icon: Sun, label: 'Светлая' },
+            { mode: 'dark' as ThemeMode, icon: Moon, label: 'Тёмная' },
+            { mode: 'system' as ThemeMode, icon: Monitor, label: 'Системная' },
+          ]).map(({ mode, icon: Icon, label }) => (
+            <button
+              key={mode}
+              onClick={() => handleThemeChange(mode)}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 transition-all text-sm font-medium ${
+                themeMode === mode
+                  ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-600 dark:text-gray-400 dark:hover:border-gray-500'
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* T-Bank */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Link className="w-5 h-5 text-gray-400" />
-          <h3 className="text-lg font-semibold text-gray-800">Т-Банк</h3>
-        </div>
-
-        <Message message={tbankMessage} />
-
-        {tbankStatus?.connected ? (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Профиль */}
+        <div className={cardClass}>
+          <div className="flex items-center gap-3 mb-4">
+            <User className="w-5 h-5 text-gray-400" />
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Профиль</h3>
+          </div>
+          <Message message={profileMessage} />
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="w-5 h-5" />
-              <span>Подключено</span>
+            <div>
+              <label className={labelClass}>Email</label>
+              <input type="email" value={user.email} disabled className={`${inputClass} bg-gray-50 text-gray-500 dark:bg-gray-600`} />
             </div>
-            {tbankStatus.balance !== null && (
-              <p className="text-gray-600">
-                Баланс: {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: tbankStatus.currency || 'RUB' }).format(tbankStatus.balance)}
-              </p>
-            )}
-            {tbankStatus.last_sync && (
-              <p className="text-sm text-gray-400">
-                Последняя синхронизация: {new Date(tbankStatus.last_sync).toLocaleString('ru-RU')}
-              </p>
-            )}
-            <button
-              onClick={handleDisconnectTBank}
-              className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-            >
-              <Unlink className="w-4 h-4" />
-              Отключить
+            <div>
+              <label className={labelClass}>Имя</label>
+              <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Ваше имя" className={inputClass} />
+            </div>
+            <button onClick={handleSaveProfile} disabled={isSaving} className={btnPrimary}>
+              {isSaving ? 'Сохранение...' : 'Сохранить'}
             </button>
           </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-gray-500 text-sm">
-              Подключите Т-Банк для автоматической загрузки транзакций
-            </p>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Токен API</label>
-              <input
-                type="password"
-                value={tbankToken}
-                onChange={(e) => setTbankToken(e.target.value)}
-                placeholder="t.xxxxx..."
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                Получите токен на{' '}
-                <a href="https://www.tbank.ru/invest/settings/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                  tbank.ru/invest/settings
-                </a>
-              </p>
-            </div>
-            <button
-              onClick={handleConnectTBank}
-              disabled={isConnecting || !tbankToken.trim()}
-              className="flex items-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 transition-colors"
-            >
-              <Link className="w-4 h-4" />
-              {isConnecting ? 'Подключение...' : 'Подключить'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Notifications */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Bell className="w-5 h-5 text-gray-400" />
-          <h3 className="text-lg font-semibold text-gray-800">Уведомления</h3>
         </div>
-        
-        <Message message={notifyMessage} />
-        
-        <div className="space-y-4">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={emailNotifications}
-              onChange={(e) => setEmailNotifications(e.target.checked)}
-              className="w-5 h-5 text-blue-600 rounded"
-            />
-            <span>Получать уведомления по email</span>
-          </label>
-          {emailNotifications && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email для уведомлений</label>
-              <input
-                type="email"
-                value={notificationEmail}
-                onChange={(e) => setNotificationEmail(e.target.value)}
-                placeholder={user.email}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
+
+        {/* Уведомления */}
+        <div className={cardClass}>
+          <div className="flex items-center gap-3 mb-4">
+            <Bell className="w-5 h-5 text-gray-400" />
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Уведомления</h3>
+          </div>
+          <Message message={notifyMessage} />
+          <div className="space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} className="w-5 h-5 text-blue-600 rounded" />
+              <span className="text-gray-700 dark:text-gray-300">Получать уведомления по email</span>
+            </label>
+            {emailNotifications && (
+              <div>
+                <label className={labelClass}>Email для уведомлений</label>
+                <input type="email" value={notificationEmail} onChange={(e) => setNotificationEmail(e.target.value)} placeholder={user.email} className={inputClass} />
+              </div>
+            )}
+            <button onClick={handleSaveNotifications} disabled={isSaving} className={btnPrimary}>Сохранить</button>
+          </div>
+        </div>
+
+        {/* Т-Банк */}
+        <div className={cardClass}>
+          <div className="flex items-center gap-3 mb-4">
+            <Link className="w-5 h-5 text-gray-400" />
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Т-Банк</h3>
+          </div>
+          <Message message={tbankMessage} />
+          {tbankStatus?.connected ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-medium">Подключено</span>
+              </div>
+              {tbankStatus.balance !== null && (
+                <p className="text-gray-600 dark:text-gray-300">
+                  Баланс: {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: tbankStatus.currency || 'RUB' }).format(tbankStatus.balance)}
+                </p>
+              )}
+              <button onClick={handleDisconnectTBank} className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20">
+                <Unlink className="w-4 h-4" />
+                Отключить
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-gray-500 text-sm dark:text-gray-400">Подключите Т-Банк для автоматической загрузки транзакций</p>
+              <div>
+                <label className={labelClass}>Токен API</label>
+                <input type="password" value={tbankToken} onChange={(e) => setTbankToken(e.target.value)} placeholder="t.xxxxx..." className={inputClass} />
+                <p className="text-xs text-gray-400 mt-1">
+                  Получите на{' '}
+                  <a href="https://www.tbank.ru/invest/settings/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">tbank.ru/invest/settings</a>
+                </p>
+              </div>
+              <button onClick={handleConnectTBank} disabled={isConnecting || !tbankToken.trim()} className="flex items-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 transition-colors text-sm font-medium">
+                <Link className="w-4 h-4" />
+                {isConnecting ? 'Подключение...' : 'Подключить'}
+              </button>
             </div>
           )}
-          <button
-            onClick={handleSaveNotifications}
-            disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            Сохранить
-          </button>
+        </div>
+
+        {/* Безопасность */}
+        <div className={cardClass}>
+          <div className="flex items-center gap-3 mb-4">
+            <Shield className="w-5 h-5 text-gray-400" />
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Безопасность</h3>
+          </div>
+          <Message message={passwordMessage} />
+          <div className="space-y-4">
+            <div>
+              <label className={labelClass}>Текущий пароль</label>
+              <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Новый пароль</label>
+              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={inputClass} />
+              <p className="text-xs text-gray-400 mt-1">Минимум 12 символов</p>
+            </div>
+            <div>
+              <label className={labelClass}>Подтверждение</label>
+              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={inputClass} />
+            </div>
+            <button onClick={handleChangePassword} disabled={isSaving || !currentPassword || !newPassword} className={btnPrimary}>Сменить пароль</button>
+          </div>
         </div>
       </div>
 
-      {/* Security */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Shield className="w-5 h-5 text-gray-400" />
-          <h3 className="text-lg font-semibold text-gray-800">Безопасность</h3>
-        </div>
-        
-        <Message message={passwordMessage} />
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Текущий пароль</label>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Новый пароль</label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              Минимум 12 символов, цифра, заглавная буква и спецсимвол
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Подтверждение пароля</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <button
-            onClick={handleChangePassword}
-            disabled={isSaving || !currentPassword || !newPassword}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            Сменить пароль
-          </button>
-        </div>
-      </div>
-
-      {/* Logout */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <button
-          onClick={onLogout}
-          className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-        >
+      {/* Выход */}
+      <div className={cardClass}>
+        <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors dark:text-red-400 dark:hover:bg-red-900/20">
           <LogOut className="w-5 h-5" />
           Выйти из аккаунта
         </button>
