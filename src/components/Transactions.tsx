@@ -261,6 +261,12 @@ const Transactions: React.FC<TransactionsProps> = ({ categories }) => {
                         <p className="font-medium text-gray-900">{tx.description || 'Без описания'}</p>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                           <span>{getCategoryName(tx.category_id)}</span>
+                          {tx.transaction_date && (
+                            <>
+                              <span>·</span>
+                              <span>{new Date(tx.transaction_date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

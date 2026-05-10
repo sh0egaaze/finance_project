@@ -13,6 +13,8 @@ from app.routers.auth import get_current_user
 from app.ml.model_loader import registry
 import logging
 from app.ml.categorizer import categorize
+from app.ml.anomaly_detector import detect_anomaly
+from sqlalchemy import func as sql_func
 
 logger = logging.getLogger(__name__)
 
@@ -383,6 +385,56 @@ async def smart_input_confirm(
     )
 
     try:
+        abs_amount = abs(float(tx.amount))
+        hour = tx.transaction_date.hour
+        day_of_week = tx.transaction_date.weekday()
+        
+        three_months_ago = datetime.now(timezone.utc) - timedelta(days=90)
+        user_avg = db.query(sql_func.avg(sql_func.abs(Transaction.amount))).filter(
+            Transaction.user_id == user.id,
+            Transaction.transaction_date >= three_months_ago
+        ).scalar() or abs_amount
+        
+        category_code = "other"
+        if tx.category_id:
+            cat_obj = db.query(Category).filter(Category.id == tx.category_id).first()
+            if cat_obj:
+                category_code = cat_obj.code
+        
+        try:
+            result = detect_anomaly({
+                "amount": abs_amount,
+                "hour": hour,
+                "day_of_week": day_of_week,
+                "category": category_code,
+                "user_avg_amount": float(user_avg),
+                "is_weekend": 1 if day_of_week >= 5 else 0,
+            })
+            if result.get("is_suspicious"):
+                tx.is_suspicious = True
+                tx.suspicious_reason = result.get("reason") or "Нетипичная транзакция"
+        except Exception as e:
+            logger.warning(f"ML anomaly check failed: {e}")
+        
+        if not tx.is_suspicious and abs_amount > 0:
+            if tx.category_id:
+                cat_avg = db.query(sql_func.avg(sql_func.abs(Transaction.amount))).filter(
+                    Transaction.user_id == user.id,
+                    Transaction.category_id == tx.category_id,
+                    Transaction.transaction_date >= three_months_ago
+                ).scalar()
+                if cat_avg and float(cat_avg) > 0 and abs_amount > float(cat_avg) * 3:
+                    tx.is_suspicious = True
+                    tx.suspicious_reason = f"Сумма в {abs_amount/float(cat_avg):.1f} раз выше средней для этой категории"
+            
+            if not tx.is_suspicious and 2 <= hour <= 5 and abs_amount > 3000:
+                tx.is_suspicious = True
+                tx.suspicious_reason = "Крупная транзакция в ночное время"
+            
+            if not tx.is_suspicious and abs_amount > 30000:
+                tx.is_suspicious = True
+                tx.suspicious_reason = f"Крупная сумма: {abs_amount:,.0f}₽".replace(",", " ")
+        
         db.add(tx)
         db.commit()
         db.refresh(tx)

@@ -30,6 +30,7 @@ export default function SuspiciousTransactions() {
   const [transactions, setTransactions] = useState<SuspiciousTransaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [reportedIds, setReportedIds] = useState<Set<number>>(new Set());
 
   const loadData = async () => {
     try {
@@ -66,14 +67,8 @@ export default function SuspiciousTransactions() {
     }
   };
 
-  const handleReject = async (id: number) => {
-    if (!confirm('Удалить эту транзакцию?')) return;
-    try {
-      await api.deleteTransaction(id);
-      setTransactions(transactions.filter(t => t.id !== id));
-    } catch (error) {
-      console.error('Error rejecting transaction:', error);
-    }
+  const handleReport = (id: number) => {
+      setReportedIds(prev => new Set(prev).add(id));
   };
 
   if (isLoading) {
@@ -157,28 +152,46 @@ export default function SuspiciousTransactions() {
                     )}
                   </div>
                 </div>
-                <div className="text-right">
+                                <div className="text-right flex flex-col items-end gap-2">
                   <p className="text-xl font-bold text-red-600">
                     {formatCurrency(transaction.amount)}
                   </p>
-                  <div className="flex gap-2 mt-3">
-                    <button
-                      onClick={() => handleConfirm(transaction.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
-                      title="Я узнаю эту транзакцию, убрать из подозрительных"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      <span className="text-sm">Всё в порядке</span>
-                    </button>
-                    <button
-                      onClick={() => handleReject(transaction.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
-                      title="Я не совершал эту транзакцию, удалить"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      <span className="text-sm">Есть подозрения</span>
-                    </button>
-                  </div>
+                  
+                  {reportedIds.has(transaction.id) ? (
+                    <div className="mt-2 p-3 bg-red-50 rounded-lg border border-red-200 text-left max-w-xs">
+                      <p className="text-sm font-semibold text-red-700 mb-2">⚠️ Действия:</p>
+                      <ul className="text-xs text-red-600 space-y-1.5">
+                        <li>1. Заблокируйте карту в приложении банка</li>
+                        <li>2. Позвоните на горячую линию банка</li>
+                        <li>3. Напишите заявление в полицию</li>
+                      </ul>
+                      <button
+                        onClick={() => handleConfirm(transaction.id)}
+                        className="mt-3 w-full px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors text-xs"
+                      >
+                        Разобрался, убрать из списка
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => handleConfirm(transaction.id)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                        title="Я узнаю эту транзакцию, убрать из подозрительных"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        <span className="text-sm">Всё в порядке</span>
+                      </button>
+                      <button
+                        onClick={() => handleReport(transaction.id)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+                        title="Я не совершал эту транзакцию"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        <span className="text-sm">Есть подозрения</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

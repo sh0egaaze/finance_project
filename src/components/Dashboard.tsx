@@ -283,7 +283,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
                       {tx.description || 'Без описания'}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {new Date(tx.transaction_date).toLocaleDateString('ru-RU')}
+                      {new Date(tx.transaction_date).toLocaleDateString('ru-RU')}{' '}
+                      {new Date(tx.transaction_date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                   <span className={`font-medium ${Number(tx.amount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>

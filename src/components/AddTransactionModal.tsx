@@ -21,6 +21,9 @@ export default function AddTransactionModal({ categories, onSubmit, onClose }: A
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState(
+      new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,7 +38,7 @@ export default function AddTransactionModal({ categories, onSubmit, onClose }: A
         category_id: categoryId,
         type,
         source: 'manual',
-        date,
+        date: `${date}T${time}`,
       });
       onClose();
     } catch (error) {
@@ -137,17 +140,30 @@ export default function AddTransactionModal({ categories, onSubmit, onClose }: A
             </select>
           </div>
 
-          {/* Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Дата
-            </label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
+          {/* Дата и время */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Дата
+              </label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Время
+              </label>
+              <input
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
 
           {/* Buttons */}
