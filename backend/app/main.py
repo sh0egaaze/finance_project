@@ -91,7 +91,7 @@ limiter = Limiter(key_func=get_real_ip)
 app = FastAPI(
     title="Finance App API",
     description="""
-## 💰 Finance App API
+## Finance App API
 
 API для управления личными финансами, отслеживания расходов и доходов.
 
