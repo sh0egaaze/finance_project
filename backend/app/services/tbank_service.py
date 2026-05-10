@@ -219,6 +219,43 @@ class TBankService:
                 external_id=external_id,
                 transaction_date=transaction_date
             )
+            
+            # Проверка на подозрительность
+            try:
+                from ..ml.anomaly_detector import detect_anomaly
+                from sqlalchemy import func as sql_func
+                
+                abs_amount = abs(float(amount))
+                hour = transaction_date.hour
+                day_of_week = transaction_date.weekday()
+                
+                three_months_ago = datetime.now(timezone.utc) - timedelta(days=90)
+                user_avg = db_session.query(sql_func.avg(sql_func.abs(Transaction.amount))).filter(
+                    Transaction.user_id == user_id,
+                    Transaction.transaction_date >= three_months_ago
+                ).scalar() or abs_amount
+                
+                cat_code = category.code if category else "other"
+                
+                result = detect_anomaly({
+                    "amount": abs_amount,
+                    "hour": hour,
+                    "day_of_week": day_of_week,
+                    "category": cat_code,
+                    "user_avg_amount": float(user_avg),
+                    "is_weekend": 1 if day_of_week >= 5 else 0,
+                })
+                if result.get("is_suspicious"):
+                    transaction.is_suspicious = True
+                    transaction.suspicious_reason = result.get("reason") or "Нетипичная транзакция"
+            except Exception as e:
+                logger.warning(f"ML check failed for tbank tx: {e}")
+                # Fallback эвристики
+                abs_amount = abs(float(amount))
+                if abs_amount > 30000:
+                    transaction.is_suspicious = True
+                    transaction.suspicious_reason = f"Крупная сумма: {abs_amount:,.0f}₽".replace(",", " ")
+            
             db_session.add(transaction)
             new_count += 1
         

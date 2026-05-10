@@ -270,7 +270,6 @@ async def sync_tbank(
             detail="Т-Банк не подключён. Сначала подключитесь в настройках."
         )
     
-    # Расшифровка токена
     _s = get_settings()
     try:
         token = _decrypt_token(
@@ -279,138 +278,24 @@ async def sync_tbank(
             _s.TBANK_ENCRYPTION_KEY
         )
     except InvalidToken:
-        logger.error("Не удалось расшифровать токен — возможно, изменён ключ шифрования")
-        raise HTTPException(
-            status_code=500, 
-            detail="Токен повреждён. Пожалуйста, переподключите Т-Банк."
-        )
+        raise HTTPException(status_code=500, detail="Токен повреждён. Переподключите Т-Банк.")
     except Exception as e:
         logger.error(f"Decryption error: {e}")
-        raise HTTPException(
-            status_code=500, 
-            detail="Ошибка при расшифровке токена"
-        )
+        raise HTTPException(status_code=500, detail="Ошибка при расшифровке токена")
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-
-    # Запрашиваем операции по API
+    from app.services.tbank_service import TBankService
+    
+    service = TBankService(token)
+    
     try:
-        async with httpx.AsyncClient() as client:
-            # Проверяем наличие аккаунтов
-            accounts_response = await client.post(
-                f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.SandboxService/GetSandboxAccounts",
-                headers=headers,
-                json={},
-                timeout=10
-            )
-            
-            if accounts_response.status_code != 200:
-                logger.warning(f"T-Bank API rejected token: {accounts_response.status_code}")
-                raise HTTPException(
-                    status_code=503,
-                    detail="T-Bank API временно недоступен. Попробуйте позже."
-                )
-            
-            accounts_data = accounts_response.json()
-            accounts = accounts_data.get("accounts", [])
-            
-            # Если аккаунтов нет, создаём
-            if not accounts:
-                create_response = await client.post(
-                    f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.SandboxService/OpenSandboxAccount",
-                    headers=headers,
-                    json={},
-                    timeout=10
-                )
-                if create_response.status_code == 200:
-                    account_id = create_response.json().get("accountId")
-                else:
-                    raise HTTPException(
-                        status_code=503,
-                        detail="T-Bank API временно недоступен. Попробуйте позже."
-                    )
-            else:
-                account_id = accounts[0].get("id") or accounts[0].get("accountId")
-            
-            # Получаем операции за последние 30 дней
-            now = datetime.now(timezone.utc)
-            from_date = now - timedelta(days=30)
-            operations_response = await client.post(
-                f"{_s.TBANK_API_URL}/tinkoff.public.invest.api.contract.v1.OperationsService/GetOperations",
-                headers=headers,
-                json={
-                    "accountId": account_id,
-                    "from": from_date.isoformat(),
-                    "to": now.isoformat(),
-                },
-                timeout=10
-            )
-            
-            if operations_response.status_code != 200:
-                raise HTTPException(
-                    status_code=503,
-                    detail="T-Bank API временно недоступен. Попробуйте позже."
-                )
-            
-            operations = operations_response.json().get("operations", [])
-            
-            # Сохраняем транзакции в базу данных
-            added_count = 0
-            for op in operations:
-                ext_id = op.get("id", "")
-                
-                # Проверяем, не существует ли уже такая транзакция
-                existing = db.query(Transaction).filter(
-                    Transaction.external_id == ext_id,
-                    Transaction.user_id == current_user.id
-                ).first()
-                if existing:
-                    continue
-                
-                # Определяем категорию по MCC-коду
-                mcc = str(op.get("mcc", ""))
-                cat = _find_category_by_mcc(db, mcc, current_user.id)
-                
-                amount = float(op.get("payment", {}).get("amount", 0))
-                
-                tx = Transaction(
-                    user_id=current_user.id,
-                    category_id=cat.id if cat else None,
-                    amount=amount,
-                    currency=op.get("payment", {}).get("currency", "RUB"),
-                    description=op.get("description", ""),
-                    source=TransactionSource.tbank_api,
-                    external_id=ext_id,
-                    merchant_name=op.get("merchant", {}).get("name", ""),
-                    merchant_category_code=mcc,
-                    transaction_date=datetime.fromisoformat(op.get("date", now.isoformat()).replace("Z", "+00:00")),
-                )
-                db.add(tx)
-                added_count += 1
-            
-            db.commit()
-            return {
-                "message": f"Синхронизация завершена. Добавлено транзакций: {added_count}",
-                "added": added_count
-            }
-            
-    except httpx.TimeoutException:
-        logger.error("T-Bank API timeout")
-        raise HTTPException(
-            status_code=503,
-            detail="T-Bank API временно недоступен. Попробуйте позже."
-        )
-    except HTTPException:
-        raise
+        new_count = await service.sync_transactions(db, current_user.id, days=30)
+        return {
+            "message": f"Синхронизация завершена. Добавлено транзакций: {new_count}",
+            "added": new_count
+        }
     except Exception as e:
         logger.error(f"T-Bank sync error: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Ошибка синхронизации с T-Bank API"
-        )
+        raise HTTPException(status_code=500, detail="Ошибка синхронизации с T-Bank API")
 
 
 # ========================================================
