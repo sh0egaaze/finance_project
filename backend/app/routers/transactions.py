@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+"""
+Роутер для транзакций
+"""
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Path, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, condecimal, Field
-from typing import Optional
+from typing import Optional, List
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from app.database import get_db
@@ -18,43 +21,242 @@ from sqlalchemy import func as sql_func
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/transactions", tags=["transactions"])
+router = APIRouter(prefix="/transactions", tags=["Транзакции"])
 
 limiter = Limiter(key_func=get_remote_address)
 
+
+# ===== Pydantic схемы =====
 class TransactionCreate(BaseModel):
-    description: str = Field(..., min_length=1, max_length=500, description="Описание транзакции")
-    amount: Decimal = Field(..., gt=0, description="Сумма > 0. Если указан флаг is_income")
-    is_income: bool = Field(..., description="True = доход, False = расход")
-    category_id: Optional[int] = Field(None, description="ID категории")
-    transaction_date: Optional[str] = None
+    """Схема для создания транзакции"""
+    description: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Описание транзакции",
+        examples=["Покупка в Пятёрочке"]
+    )
+    amount: Decimal = Field(
+        ...,
+        gt=0,
+        description="Сумма транзакции (всегда положительная, знак определяется is_income)",
+        examples=[1500.50]
+    )
+    is_income: bool = Field(
+        ...,
+        description="True = доход, False = расход",
+        examples=[False]
+    )
+    category_id: Optional[int] = Field(
+        None,
+        description="ID категории (опционально)",
+        examples=[1]
+    )
+    transaction_date: Optional[str] = Field(
+        None,
+        description="Дата транзакции (ISO 8601). По умолчанию — текущая",
+        examples=["2024-01-15T14:30:00+00:00"]
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "description": "Покупка в Пятёрочке",
+                    "amount": 1500.50,
+                    "is_income": False,
+                    "category_id": 1,
+                    "transaction_date": "2024-01-15T14:30:00+00:00"
+                }
+            ]
+        }
+    }
+
 
 class TransactionUpdate(BaseModel):
-    description: Optional[str] = Field(None, min_length=1, max_length=500)
-    amount: Optional[Decimal] = Field(None, gt=0)
-    is_income: Optional[bool] = None
-    category_id: Optional[int] = None
-    category_manual: Optional[bool] = None
-    transaction_date: Optional[str] = None
+    """Схема для обновления транзакции"""
+    description: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=500,
+        description="Новое описание",
+        examples=["Обновлённое описание"]
+    )
+    amount: Optional[Decimal] = Field(
+        None,
+        gt=0,
+        description="Новая сумма (положительная)",
+        examples=[2000.0]
+    )
+    is_income: Optional[bool] = Field(
+        None,
+        description="Изменить тип: True = доход, False = расход",
+        examples=[False]
+    )
+    category_id: Optional[int] = Field(
+        None,
+        description="Новый ID категории",
+        examples=[2]
+    )
+    category_manual: Optional[bool] = Field(
+        None,
+        description="Была ли категория выбрана вручную",
+        examples=[True]
+    )
+    transaction_date: Optional[str] = Field(
+        None,
+        description="Новая дата транзакции (ISO 8601)",
+        examples=["2024-01-16T10:00:00+00:00"]
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "description": "Обновлённое описание",
+                    "amount": 2000.0,
+                    "category_id": 2
+                }
+            ]
+        }
+    }
+
 
 class TransactionResponse(BaseModel):
-    id: int
-    description: str
-    amount: Decimal
-    is_income: bool
-    category_id: Optional[int]
-    transaction_date: Optional[datetime]
-    created_at: datetime
-    source: Optional[str] = None
+    """Схема ответа с данными транзакции"""
+    id: int = Field(..., description="Уникальный идентификатор", examples=[1])
+    description: str = Field(..., description="Описание транзакции", examples=["Покупка в магазине"])
+    amount: Decimal = Field(..., description="Сумма (отрицательная для расходов)", examples=[-1500.50])
+    is_income: bool = Field(..., description="Является ли доходом", examples=[False])
+    category_id: Optional[int] = Field(None, description="ID категории", examples=[1])
+    transaction_date: Optional[datetime] = Field(None, description="Дата транзакции", examples=["2024-01-15T14:30:00+00:00"])
+    created_at: datetime = Field(..., description="Дата создания записи", examples=["2024-01-15T14:30:00+00:00"])
+    source: Optional[str] = Field(None, description="Источник: MANUAL, TBANK и т.д.", examples=["MANUAL"])
     
     class Config:
         from_attributes = True
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "id": 1,
+                    "description": "Покупка в Пятёрочке",
+                    "amount": -1500.50,
+                    "is_income": False,
+                    "category_id": 1,
+                    "transaction_date": "2024-01-15T14:30:00+00:00",
+                    "created_at": "2024-01-15T14:30:00+00:00",
+                    "source": "MANUAL"
+                }
+            ]
+        }
+    }
+
+
+class TransactionListResponse(BaseModel):
+    """Схема ответа со списком транзакций"""
+    items: List[dict] = Field(..., description="Список транзакций")
+    total: int = Field(..., description="Общее количество транзакций", examples=[142])
+    page: int = Field(..., description="Текущая страница", examples=[1])
+    per_page: int = Field(..., description="Записей на странице", examples=[20])
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "items": [
+                        {
+                            "id": 1,
+                            "description": "Покупка в Пятёрочке",
+                            "amount": -1500.50,
+                            "is_income": False,
+                            "category_id": 1,
+                            "transaction_date": "2024-01-15T14:30:00+00:00",
+                            "created_at": "2024-01-15T14:30:00+00:00",
+                            "source": "MANUAL",
+                            "is_suspicious": False,
+                            "suspicious_reason": None
+                        }
+                    ],
+                    "total": 142,
+                    "page": 1,
+                    "per_page": 20
+                }
+            ]
+        }
+    }
+
+
+class TransactionCreateResponse(BaseModel):
+    """Схема ответа при создании транзакции"""
+    id: int = Field(..., description="ID созданной транзакции", examples=[1])
+    description: str = Field(..., description="Описание", examples=["Покупка в магазине"])
+    amount: float = Field(..., description="Сумма", examples=[-1500.50])
+    is_income: bool = Field(..., description="Является ли доходом", examples=[False])
+    category_id: Optional[int] = Field(None, description="ID категории", examples=[1])
+    transaction_date: Optional[str] = Field(None, description="Дата транзакции", examples=["2024-01-15T14:30:00+00:00"])
+    created_at: Optional[str] = Field(None, description="Дата создания", examples=["2024-01-15T14:30:00+00:00"])
+    source: Optional[str] = Field(None, description="Источник", examples=["MANUAL"])
+
+
+class SmartInputRequest(BaseModel):
+    """Схема запроса умного ввода"""
+    text: str = Field(
+        ..., 
+        min_length=1, 
+        max_length=1000,
+        description="Текст для парсинга транзакции на естественном языке",
+        examples=["кофе 350р", "зарплата 100000", "такси 500 рублей"]
+    )
+    
+    class Config:
+        from_attributes = True
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"text": "кофе в старбаксе 450р"},
+                {"text": "зарплата 100000"},
+                {"text": "такси до работы 500 рублей"}
+            ]
+        }
+    }
+
+
+class SmartInputResponse(BaseModel):
+    """Схема ответа умного ввода (превью)"""
+    amount: Optional[float] = Field(None, description="Распознанная сумма", examples=[450.0])
+    description: Optional[str] = Field(None, description="Распознанное описание", examples=["кофе в старбаксе"])
+    category_id: Optional[int] = Field(None, description="Предложенная категория", examples=[2])
+    is_income: bool = Field(False, description="Определён ли как доход", examples=[False])
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "amount": 450.0,
+                    "description": "кофе в старбаксе",
+                    "category_id": 2,
+                    "is_income": False
+                }
+            ]
+        }
+    }
+
+
+class UpdateResponse(BaseModel):
+    """Схема ответа при обновлении"""
+    status: str = Field(..., description="Статус операции", examples=["updated"])
+
+
+# ===== Вспомогательные функции =====
 def get_own_transaction(
     tx_id: int,
     db: Session,
     user: User,
 ) -> Transaction:
+    """Получить транзакцию, принадлежащую пользователю"""
     tx = db.query(Transaction).filter(
         Transaction.id == tx_id,
         Transaction.user_id == user.id,   
@@ -66,99 +268,72 @@ def get_own_transaction(
         )
     return tx
 
-class SmartInputRequest(BaseModel):
-    text: str = Field(
-        ..., 
-        min_length=1, 
-        max_length=1000,
-        description="Текст для парсинга транзакции"
-    )
-    
-    class Config:
-        from_attributes = True
 
-@router.put("/{tx_id}")
-async def update_transaction(
-    tx_id: int,
-    data: TransactionUpdate,   
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
-):
-    tx = db.query(Transaction).filter(
-        Transaction.id == tx_id,
-        Transaction.user_id == user.id
-    ).first()
-    if not tx:
-        raise HTTPException(status_code=404, detail="Транзакция не найдена")
+# ===== Эндпоинты =====
+@router.get(
+    "",
+    response_model=TransactionListResponse,
+    summary="Получить список транзакций",
+    description="""
+Возвращает список транзакций пользователя с пагинацией.
 
-    update_data = data.model_dump(exclude_unset=True)
-    
-    new_amount = update_data.pop('amount', None)
-    new_is_income = update_data.pop('is_income', None)
-    
-    if new_amount is not None:
-        if new_is_income is not None:
-            tx.amount = new_amount if new_is_income else -new_amount
-        else:
-            tx.amount = new_amount if tx.amount >= 0 else -new_amount
-    elif new_is_income is not None and tx.amount is not None:
-        tx.amount = abs(tx.amount) if new_is_income else -abs(tx.amount)
-    
-    new_date = update_data.pop('transaction_date', None)
-    if new_date:
-        try:
-            from datetime import datetime
-            tx.transaction_date = datetime.fromisoformat(new_date)
-        except ValueError:
-            pass
-    
-    for field, value in update_data.items():
-        setattr(tx, field, value)
+**Требуется авторизация.**
 
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="Недопустимые данные"
-        )
-    return {"status": "updated"}
+**Параметры:**
+- `limit` — максимальное количество записей (1-100, по умолчанию 20)
+- `offset` — смещение для пагинации (по умолчанию 0)
+- `is_suspicious` — фильтр по подозрительным транзакциям
 
-@router.get("/{tx_id}")
-async def get_transaction(
-    tx_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
-):
-    return get_own_transaction(tx_id, db, user)
+**Сортировка:** по дате транзакции (новые первыми).
 
-@router.delete("/{tx_id}", status_code=204)
-async def delete_transaction(
-    tx_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
-):
-    tx = get_own_transaction(tx_id, db, user)
-    try:
-        db.delete(tx)
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Ошибка при удалении транзакции"
-        )
-
-@router.get("")
+**Структура ответа:**
+- `items` — массив транзакций
+- `total` — общее количество (для пагинации)
+- `page` / `per_page` — информация о странице
+    """,
+    response_description="Список транзакций с пагинацией",
+    responses={
+        200: {
+            "description": "Успешный ответ со списком транзакций",
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        }
+    }
+)
 async def get_transactions(
-    limit: int = Query(20, ge=1, le=100, description="Макс. кол-во записей"),
-    offset: int = Query(0, ge=0, description="Смещение"),
-    is_suspicious: Optional[bool] = Query(None, description="Фильтр по подозрительности"),
+    limit: int = Query(
+        20,
+        ge=1,
+        le=100,
+        description="Максимальное количество записей",
+        examples=[20]
+    ),
+    offset: int = Query(
+        0,
+        ge=0,
+        description="Смещение для пагинации",
+        examples=[0]
+    ),
+    is_suspicious: Optional[bool] = Query(
+        None,
+        description="Фильтр: только подозрительные (true) или обычные (false)",
+        examples=[False]
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Получение списка транзакций с пагинацией"""
+    """
+    Получение списка транзакций с пагинацией.
+    
+    Возвращает транзакции пользователя, отсортированные по дате (новые первыми).
+    Поддерживает фильтрацию по подозрительности.
+    """
     query = db.query(Transaction).filter(
         Transaction.user_id == user.id
     )
@@ -190,13 +365,80 @@ async def get_transactions(
     return {"items": items, "total": total, "page": 1, "per_page": limit}
 
 
-@router.post("", status_code=201)
+@router.post(
+    "",
+    response_model=TransactionCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Создать транзакцию",
+    description="""
+Создаёт новую транзакцию (доход или расход).
+
+**Требуется авторизация.**
+
+**Обязательные поля:**
+- `description` — описание транзакции
+- `amount` — сумма (положительное число)
+- `is_income` — тип: `true` = доход, `false` = расход
+
+**Опциональные поля:**
+- `category_id` — ID категории
+- `transaction_date` — дата (по умолчанию текущая)
+
+**Проверка на подозрительность:**
+
+Каждая транзакция проверяется ML-моделью и эвристиками:
+- Сумма значительно выше средней для категории
+- Крупная транзакция в ночное время (02:00-05:00)
+- Сумма превышает 30 000 ₽
+
+Подозрительные транзакции помечаются флагом `is_suspicious`.
+    """,
+    response_description="Созданная транзакция",
+    responses={
+        201: {
+            "description": "Транзакция успешно создана",
+        },
+        400: {
+            "description": "Ошибка валидации или категория не принадлежит пользователю",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Ошибка при создании: категория не принадлежит вам"}
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        },
+        422: {
+            "description": "Ошибка валидации данных",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": [
+                            {"loc": ["body", "amount"], "msg": "Input should be greater than 0", "type": "greater_than"}
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
 async def create_transaction(
     data: TransactionCreate,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Создание новой транзакции"""
+    """
+    Создание новой транзакции.
+    
+    Создаёт транзакцию с проверкой на подозрительность
+    через ML-модель и эвристические правила.
+    """
     from app.ml.anomaly_detector import detect_anomaly
     from sqlalchemy import func as sql_func
     
@@ -297,7 +539,300 @@ async def create_transaction(
         "source": tx.source,
     }
 
-@router.post("/smart-input")
+
+@router.get(
+    "/{tx_id}",
+    response_model=TransactionResponse,
+    summary="Получить транзакцию по ID",
+    description="""
+Возвращает детальную информацию о конкретной транзакции.
+
+**Требуется авторизация.**
+
+Можно получить только свои транзакции.
+    """,
+    response_description="Данные транзакции",
+    responses={
+        200: {
+            "description": "Транзакция найдена",
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        },
+        404: {
+            "description": "Транзакция не найдена",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Транзакция не найдена или не принадлежит вам"}
+                }
+            }
+        }
+    }
+)
+async def get_transaction(
+    tx_id: int = Path(..., description="ID транзакции", examples=[1]),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """
+    Получить транзакцию по ID.
+    
+    Возвращает полную информацию о транзакции,
+    включая категорию, дату и статус подозрительности.
+    """
+    return get_own_transaction(tx_id, db, user)
+
+
+@router.put(
+    "/{tx_id}",
+    response_model=UpdateResponse,
+    summary="Обновить транзакцию",
+    description="""
+Обновляет существующую транзакцию.
+
+**Требуется авторизация.**
+
+Можно изменить:
+- `description` — описание
+- `amount` — сумму (положительное число)
+- `is_income` — тип (доход/расход)
+- `category_id` — категорию
+- `transaction_date` — дату
+
+Передавайте только те поля, которые нужно изменить.
+
+**Логика изменения суммы:**
+- Если указаны `amount` и `is_income` — устанавливается новая сумма с новым знаком
+- Если указан только `amount` — знак сохраняется от текущего значения
+- Если указан только `is_income` — меняется знак существующей суммы
+    """,
+    response_description="Статус обновления",
+    responses={
+        200: {
+            "description": "Транзакция успешно обновлена",
+            "content": {
+                "application/json": {
+                    "example": {"status": "updated"}
+                }
+            }
+        },
+        400: {
+            "description": "Недопустимые данные",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недопустимые данные"}
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        },
+        404: {
+            "description": "Транзакция не найдена",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Транзакция не найдена"}
+                }
+            }
+        }
+    }
+)
+async def update_transaction(
+    tx_id: int = Path(..., description="ID транзакции", examples=[1]),
+    data: TransactionUpdate = ...,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """
+    Обновить транзакцию.
+    
+    Изменяет указанные поля транзакции.
+    Можно обновить только свои транзакции.
+    """
+    tx = db.query(Transaction).filter(
+        Transaction.id == tx_id,
+        Transaction.user_id == user.id
+    ).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Транзакция не найдена")
+
+    update_data = data.model_dump(exclude_unset=True)
+    
+    new_amount = update_data.pop('amount', None)
+    new_is_income = update_data.pop('is_income', None)
+    
+    if new_amount is not None:
+        if new_is_income is not None:
+            tx.amount = new_amount if new_is_income else -new_amount
+        else:
+            tx.amount = new_amount if tx.amount >= 0 else -new_amount
+    elif new_is_income is not None and tx.amount is not None:
+        tx.amount = abs(tx.amount) if new_is_income else -abs(tx.amount)
+    
+    new_date = update_data.pop('transaction_date', None)
+    if new_date:
+        try:
+            from datetime import datetime
+            tx.transaction_date = datetime.fromisoformat(new_date)
+        except ValueError:
+            pass
+    
+    for field, value in update_data.items():
+        setattr(tx, field, value)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Недопустимые данные"
+        )
+    return {"status": "updated"}
+
+
+@router.delete(
+    "/{tx_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Удалить транзакцию",
+    description="""
+Полностью удаляет транзакцию из системы.
+
+**Требуется авторизация.**
+
+⚠️ Действие необратимо! Удалённую транзакцию нельзя восстановить.
+
+Можно удалить только свои транзакции.
+    """,
+    responses={
+        204: {
+            "description": "Транзакция успешно удалена",
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        },
+        404: {
+            "description": "Транзакция не найдена",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Транзакция не найдена или не принадлежит вам"}
+                }
+            }
+        },
+        500: {
+            "description": "Ошибка при удалении",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Ошибка при удалении транзакции"}
+                }
+            }
+        }
+    }
+)
+async def delete_transaction(
+    tx_id: int = Path(..., description="ID транзакции", examples=[1]),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """
+    Удалить транзакцию.
+    
+    Полностью удаляет транзакцию из базы данных.
+    Можно удалить только свои транзакции.
+    """
+    tx = get_own_transaction(tx_id, db, user)
+    try:
+        db.delete(tx)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Ошибка при удалении транзакции"
+        )
+
+
+@router.post(
+    "/smart-input",
+    response_model=SmartInputResponse,
+    summary="Умный ввод (превью)",
+    description="""
+Парсит текст на естественном языке и извлекает данные транзакции.
+
+**Требуется авторизация.**
+
+**Примеры входного текста:**
+- `кофе 350р` → расход 350₽, категория "Рестораны"
+- `зарплата 100000` → доход 100 000₽, категория "Зарплата"
+- `такси до работы 500 рублей` → расход 500₽, категория "Транспорт"
+- `перевод маме 5000` → расход 5000₽
+
+**Как работает:**
+1. NLP-парсер извлекает сумму и описание
+2. ML-категоризатор определяет категорию
+3. Анализируются ключевые слова для определения дохода/расхода
+
+**Лимит:** 30 запросов в минуту.
+
+Этот эндпоинт только возвращает распознанные данные для предпросмотра.
+Для создания транзакции используйте `/smart-input/confirm`.
+    """,
+    response_description="Распознанные данные транзакции",
+    responses={
+        200: {
+            "description": "Текст успешно распознан",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "amount": 450.0,
+                        "description": "кофе в старбаксе",
+                        "category_id": 2,
+                        "is_income": False
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        },
+        429: {
+            "description": "Превышен лимит запросов",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Rate limit exceeded: 30 per 1 minute"}
+                }
+            }
+        },
+        503: {
+            "description": "NLP-парсер не загружен",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "NLP-парсер не загружен"}
+                }
+            }
+        }
+    }
+)
 @limiter.limit("30/minute")
 async def smart_input(
     request: Request,
@@ -305,6 +840,12 @@ async def smart_input(
     db: Session = Depends(get_db), 
     user: User = Depends(get_current_user)
 ):
+    """
+    Умный ввод транзакции (превью).
+    
+    Парсит текст на естественном языке и возвращает
+    распознанные данные для предварительного просмотра.
+    """
     # Подключаем ML-модуль через .get() с проверкой на None
     nlp_parser = registry.get("nlp_parser")
     categorizer = registry.get("categorizer")
@@ -336,7 +877,77 @@ async def smart_input(
         "is_income": parsed["is_income"]
     }
 
-@router.post("/smart-input/confirm", response_model=TransactionResponse, status_code=201)
+
+@router.post(
+    "/smart-input/confirm",
+    response_model=TransactionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Умный ввод (создание)",
+    description="""
+Парсит текст и сразу создаёт транзакцию.
+
+**Требуется авторизация.**
+
+Объединяет функционал `/smart-input` и `POST /transactions`:
+1. Парсит текст через NLP
+2. Определяет категорию через ML
+3. Проверяет на подозрительность
+4. Создаёт транзакцию
+
+**Лимит:** 30 запросов в минуту.
+
+**Примеры:**
+- `обед 500р` → создаст расход 500₽ в категории "Рестораны"
+- `зп 150000` → создаст доход 150 000₽ в категории "Зарплата"
+    """,
+    response_description="Созданная транзакция",
+    responses={
+        201: {
+            "description": "Транзакция успешно создана",
+        },
+        400: {
+            "description": "Не удалось распознать сумму или ошибка создания",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "no_amount": {
+                            "summary": "Сумма не распознана",
+                            "value": {"detail": "Не удалось определить сумму из текста"}
+                        },
+                        "create_error": {
+                            "summary": "Ошибка создания",
+                            "value": {"detail": "Ошибка при создании транзакции"}
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        },
+        429: {
+            "description": "Превышен лимит запросов",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Rate limit exceeded: 30 per 1 minute"}
+                }
+            }
+        },
+        503: {
+            "description": "NLP-парсер не загружен",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "NLP-парсер не загружен"}
+                }
+            }
+        }
+    }
+)
 @limiter.limit("30/minute")
 async def smart_input_confirm(
     request: Request,
@@ -344,7 +955,12 @@ async def smart_input_confirm(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
-    """Подтверждение быстрого ввода — парсит текст и создаёт транзакцию"""
+    """
+    Подтверждение быстрого ввода.
+    
+    Парсит текст и создаёт транзакцию с автоматической
+    категоризацией и проверкой на подозрительность.
+    """
     nlp_parser = registry.get("nlp_parser")
     categorizer = registry.get("categorizer")
 

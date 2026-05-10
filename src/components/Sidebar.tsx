@@ -24,15 +24,14 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   return (
     <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen sticky top-0 shrink-0">
       {/* Логотип */}
-      <div className="px-5 py-[13px] border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-            <span className="text-white text-lg">💰</span>
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white">FinanceApp</h1>
-            <p className="text-xs text-gray-400 dark:text-gray-500">Управление финансами</p>
-          </div>
+      <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="text-center">
+          <h1 className="text-xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-500 dark:from-blue-400 dark:to-indigo-400">
+            FinanceApp
+          </h1>
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 tracking-wide uppercase">
+            Управление финансами
+          </p>
         </div>
       </div>
 

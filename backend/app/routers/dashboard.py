@@ -3,32 +3,308 @@
 """
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.models import Transaction, Category, Reminder, User
 from app.routers.auth import get_current_user
 
-router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+router = APIRouter(prefix="/dashboard", tags=["Дашборд"])
+
+
+# ===== Pydantic схемы =====
+class StatsResponse(BaseModel):
+    """Статистика за текущий месяц"""
+    total_balance: float = Field(..., description="Общий баланс за всё время", examples=[150000.0])
+    total_income: float = Field(..., description="Доходы за текущий месяц", examples=[100000.0])
+    total_expense: float = Field(..., description="Расходы за текущий месяц", examples=[65000.0])
+    savings_rate: float = Field(..., description="Процент сбережений от дохода", examples=[35.0])
+    transaction_count: int = Field(..., description="Количество транзакций за месяц", examples=[42])
+
+
+class RecentTransactionItem(BaseModel):
+    """Недавняя транзакция"""
+    id: int = Field(..., description="ID транзакции", examples=[1])
+    amount: float = Field(..., description="Сумма (отрицательная для расходов)", examples=[-1500.0])
+    description: str = Field(..., description="Описание транзакции", examples=["Покупка в супермаркете"])
+    category_name: str = Field(..., description="Название категории", examples=["Еда и продукты"])
+    category_icon: str = Field(..., description="Иконка категории", examples=["🍔"])
+    transaction_date: str = Field(..., description="Дата транзакции (ISO 8601)", examples=["2024-01-15T14:30:00+00:00"])
+
+
+class SpendingCategoryItem(BaseModel):
+    """Расходы по категории"""
+    category_id: int = Field(..., description="ID категории", examples=[1])
+    category: str = Field(..., description="Название категории", examples=["Еда и продукты"])
+    name: str = Field(..., description="Название категории (алиас)", examples=["Еда и продукты"])
+    amount: float = Field(..., description="Сумма расходов", examples=[25000.0])
+    color: str = Field(..., description="HEX-цвет категории", examples=["#ef4444"])
+    icon: str = Field(..., description="Иконка категории", examples=["🍔"])
+
+
+class IncomeCategoryItem(BaseModel):
+    """Доходы по категории"""
+    category_id: int = Field(..., description="ID категории", examples=[20])
+    category: str = Field(..., description="Название категории", examples=["Зарплата и доход"])
+    name: str = Field(..., description="Название категории (алиас)", examples=["Зарплата и доход"])
+    amount: float = Field(..., description="Сумма доходов", examples=[100000.0])
+    color: str = Field(..., description="HEX-цвет категории", examples=["#16a34a"])
+    icon: str = Field(..., description="Иконка категории", examples=["💰"])
+
+
+class TrendItem(BaseModel):
+    """Данные тренда за день"""
+    date: str = Field(..., description="Дата (YYYY-MM-DD)", examples=["2024-01-15"])
+    income: float = Field(..., description="Доходы за день", examples=[0.0])
+    expense: float = Field(..., description="Расходы за день", examples=[3500.0])
+
+
+class ReminderItem(BaseModel):
+    """Напоминание"""
+    id: int = Field(..., description="ID напоминания", examples=[1])
+    title: str = Field(..., description="Заголовок напоминания", examples=["Оплата аренды"])
+    amount: Optional[float] = Field(None, description="Сумма платежа", examples=[35000.0])
+    next_reminder_date: str = Field(..., description="Дата следующего напоминания (ISO 8601)", examples=["2024-01-25T10:00:00+00:00"])
+
+
+class SuspiciousTransactionItem(BaseModel):
+    """Подозрительная транзакция"""
+    id: int = Field(..., description="ID транзакции", examples=[5])
+    amount: float = Field(..., description="Сумма транзакции", examples=[-50000.0])
+    description: str = Field(..., description="Описание", examples=["Перевод на неизвестный счёт"])
+    category_id: Optional[int] = Field(None, description="ID категории", examples=[21])
+    category_name: str = Field(..., description="Название категории", examples=["Переводы"])
+    transaction_date: str = Field(..., description="Дата транзакции (ISO 8601)", examples=["2024-01-14T03:45:00+00:00"])
+    suspicious_reason: str = Field(..., description="Причина подозрительности", examples=["Необычно крупная сумма"])
+
 
 class DashboardResponse(BaseModel):
-    stats: dict
-    recent_transactions: List[dict]
-    spending_by_category: List[dict]
-    income_by_category: List[dict]
-    monthly_trend: List[dict]
-    upcoming_reminders: List[dict]
-    suspicious_transactions: List[dict]
+    """Полный ответ дашборда"""
+    stats: dict = Field(..., description="Статистика за текущий месяц")
+    recent_transactions: List[dict] = Field(..., description="Последние 5 транзакций")
+    spending_by_category: List[dict] = Field(..., description="Расходы по категориям")
+    income_by_category: List[dict] = Field(..., description="Доходы по категориям")
+    monthly_trend: List[dict] = Field(..., description="Тренд доходов/расходов по дням")
+    upcoming_reminders: List[dict] = Field(..., description="Ближайшие напоминания")
+    suspicious_transactions: List[dict] = Field(..., description="Подозрительные транзакции")
 
-@router.get("", response_model=DashboardResponse)
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "stats": {
+                        "total_balance": 150000.0,
+                        "total_income": 100000.0,
+                        "total_expense": 65000.0,
+                        "savings_rate": 35.0,
+                        "transaction_count": 42
+                    },
+                    "recent_transactions": [
+                        {
+                            "id": 1,
+                            "amount": -1500.0,
+                            "description": "Пятёрочка",
+                            "category_name": "Еда и продукты",
+                            "category_icon": "🍔",
+                            "transaction_date": "2024-01-15T14:30:00+00:00"
+                        }
+                    ],
+                    "spending_by_category": [
+                        {"category_id": 1, "category": "Еда и продукты", "name": "Еда и продукты", "amount": 25000.0, "color": "#ef4444", "icon": "🍔"}
+                    ],
+                    "income_by_category": [
+                        {"category_id": 20, "category": "Зарплата", "name": "Зарплата", "amount": 100000.0, "color": "#16a34a", "icon": "💰"}
+                    ],
+                    "monthly_trend": [
+                        {"date": "2024-01-15", "income": 0.0, "expense": 3500.0}
+                    ],
+                    "upcoming_reminders": [
+                        {"id": 1, "title": "Оплата аренды", "amount": 35000.0, "next_reminder_date": "2024-01-25T10:00:00+00:00"}
+                    ],
+                    "suspicious_transactions": []
+                }
+            ]
+        }
+    }
+
+
+class AnalyticsResponse(BaseModel):
+    """Ответ аналитики"""
+    spending_by_category: List[dict] = Field(..., description="Расходы по категориям")
+    income_by_category: List[dict] = Field(..., description="Доходы по категориям")
+    spending_by_day: List[dict] = Field(..., description="Расходы по дням")
+    spending_trend: List[dict] = Field(..., description="Тренд доходов/расходов")
+    income_vs_expense: List[dict] = Field(..., description="Сравнение доходов и расходов")
+    top_merchants: List[dict] = Field(..., description="Топ мерчантов (продавцов)")
+    average_transaction: float = Field(..., description="Средняя сумма транзакции", examples=[1548.50])
+    total_transactions: int = Field(..., description="Всего транзакций", examples=[42])
+    total_expense: float = Field(..., description="Всего расходов", examples=[65000.0])
+    total_income: float = Field(..., description="Всего доходов", examples=[100000.0])
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "spending_by_category": [
+                        {"category_id": 1, "category": "Еда", "name": "Еда", "amount": 25000.0, "color": "#ef4444"}
+                    ],
+                    "income_by_category": [
+                        {"category_id": 20, "category": "Зарплата", "name": "Зарплата", "amount": 100000.0, "color": "#16a34a"}
+                    ],
+                    "spending_by_day": [
+                        {"date": "2024-01-15", "amount": 3500.0}
+                    ],
+                    "spending_trend": [
+                        {"date": "15.01", "income": 0.0, "expense": 3500.0}
+                    ],
+                    "income_vs_expense": [
+                        {"name": "Доходы", "value": 100000.0},
+                        {"name": "Расходы", "value": 65000.0}
+                    ],
+                    "top_merchants": [],
+                    "average_transaction": 1548.50,
+                    "total_transactions": 42,
+                    "total_expense": 65000.0,
+                    "total_income": 100000.0
+                }
+            ]
+        }
+    }
+
+
+class CategoryPrediction(BaseModel):
+    """Прогноз по категории"""
+    category_id: int = Field(..., description="ID категории", examples=[1])
+    name: str = Field(..., description="Название категории", examples=["Еда и продукты"])
+    color: str = Field(..., description="HEX-цвет категории", examples=["#ef4444"])
+    predicted_amount: float = Field(..., description="Прогнозируемая сумма", examples=[27500.0])
+    trend: str = Field(..., description="Тренд: up, down, stable", examples=["up"])
+
+
+class PredictionsResponse(BaseModel):
+    """Ответ с прогнозами"""
+    next_month_total: float = Field(..., description="Прогнозируемый баланс на следующий месяц", examples=[35000.0])
+    next_month_expense: float = Field(..., description="Прогнозируемые расходы", examples=[65000.0])
+    next_month_income: float = Field(..., description="Прогнозируемые доходы", examples=[100000.0])
+    by_category: List[CategoryPrediction] = Field(..., description="Прогнозы по категориям")
+    trends: List[dict] = Field(default=[], description="Тренды (зарезервировано)")
+    recommendations: List[str] = Field(default=[], description="Рекомендации")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "next_month_total": 35000.0,
+                    "next_month_expense": 65000.0,
+                    "next_month_income": 100000.0,
+                    "by_category": [
+                        {"category_id": 1, "name": "Еда и продукты", "color": "#ef4444", "predicted_amount": 27500.0, "trend": "up"},
+                        {"category_id": 3, "name": "Транспорт", "color": "#3b82f6", "predicted_amount": 12000.0, "trend": "stable"}
+                    ],
+                    "trends": [],
+                    "recommendations": []
+                }
+            ]
+        }
+    }
+
+
+class SavingTip(BaseModel):
+    """Совет по экономии"""
+    id: int = Field(..., description="ID совета", examples=[1])
+    title: str = Field(..., description="Заголовок совета", examples=["🛍️ Высокие расходы на «Покупки»"])
+    description: str = Field(..., description="Описание совета", examples=["Категория занимает 25% расходов. Попробуйте сократить на 30%."])
+    potential_savings: Optional[float] = Field(None, description="Потенциальная экономия в рублях", examples=[5000.0])
+    category: Optional[str] = Field(None, description="Код категории (если применимо)", examples=["SHOPPING"])
+    priority: str = Field(..., description="Приоритет: high, medium, low", examples=["high"])
+
+
+class TipsResponse(BaseModel):
+    """Ответ с советами по экономии"""
+    tips: List[SavingTip] = Field(..., description="Список советов по экономии")
+    total_potential_savings: float = Field(..., description="Общая потенциальная экономия", examples=[15000.0])
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "tips": [
+                        {
+                            "id": 1,
+                            "title": "🛍️ Высокие расходы на «Покупки»",
+                            "description": "Категория занимает 25% расходов (15 000 ₽/мес). Попробуйте сократить на 30%.",
+                            "potential_savings": 4500.0,
+                            "category": "SHOPPING",
+                            "priority": "high"
+                        },
+                        {
+                            "id": 2,
+                            "title": "💰 Откладывайте излишки",
+                            "description": "У вас остаётся ~35 000 ₽/мес. Переводите их на накопительный счёт автоматически.",
+                            "potential_savings": None,
+                            "category": None,
+                            "priority": "low"
+                        }
+                    ],
+                    "total_potential_savings": 15000.0
+                }
+            ]
+        }
+    }
+
+
+# ===== Эндпоинты =====
+@router.get(
+    "",
+    response_model=DashboardResponse,
+    summary="Получить данные дашборда",
+    description="""
+Возвращает полную информацию для главной страницы дашборда.
+
+**Требуется авторизация.**
+
+**Включает:**
+- **Статистика** — баланс, доходы/расходы за месяц, процент сбережений
+- **Последние транзакции** — 5 последних операций
+- **Расходы по категориям** — распределение расходов за текущий месяц
+- **Доходы по категориям** — распределение доходов за текущий месяц  
+- **Тренд за 30 дней** — динамика доходов/расходов по дням
+- **Напоминания** — ближайшие 5 активных напоминаний
+- **Подозрительные транзакции** — транзакции, помеченные как подозрительные
+
+**Периоды:**
+- Статистика расходов/доходов — с 1 числа текущего месяца
+- Общий баланс — за всё время
+- Тренд — последние 30 дней
+    """,
+    response_description="Данные дашборда",
+    responses={
+        200: {
+            "description": "Успешный ответ с данными дашборда",
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        }
+    }
+)
 async def get_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Получить данные дашборда"""
+    """
+    Получить данные дашборда.
+    
+    Возвращает агрегированную информацию о финансах пользователя
+    для отображения на главной странице приложения.
+    """
     now = datetime.now(timezone.utc)
     
     # Текущий месяц: с 1 числа по сегодня
@@ -211,15 +487,70 @@ async def get_dashboard(
     }
 
 
-@router.get("/analytics")
+@router.get(
+    "/analytics",
+    response_model=AnalyticsResponse,
+    summary="Получить аналитику расходов",
+    description="""
+Возвращает детальную аналитику по доходам и расходам за выбранный период.
+
+**Требуется авторизация.**
+
+**Параметры периода:**
+- `period` — предустановленный период: `week`, `month`, `quarter`, `year`
+- `date_from` / `date_to` — произвольный диапазон дат (ISO 8601)
+
+Если указаны `date_from` и `date_to`, параметр `period` игнорируется.
+
+**Включает:**
+- Расходы по категориям (для PieChart)
+- Доходы по категориям
+- Расходы по дням (для BarChart)
+- Тренд доходов/расходов (для LineChart)
+- Сравнение доходов и расходов
+- Средняя сумма транзакции
+    """,
+    response_description="Аналитические данные",
+    responses={
+        200: {
+            "description": "Успешный ответ с аналитикой",
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        }
+    }
+)
 async def get_analytics(
-    period: str = "month",
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
+    period: str = Query(
+        "month",
+        description="Период анализа",
+        examples=["week", "month", "quarter", "year"],
+        enum=["week", "month", "quarter", "year"]
+    ),
+    date_from: Optional[str] = Query(
+        None,
+        description="Начало периода (ISO 8601)",
+        examples=["2024-01-01"]
+    ),
+    date_to: Optional[str] = Query(
+        None,
+        description="Конец периода (ISO 8601)",
+        examples=["2024-01-31"]
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Аналитика расходов"""
+    """
+    Аналитика расходов.
+    
+    Возвращает детальную статистику по транзакциям
+    для построения графиков и диаграмм.
+    """
     now = datetime.now(timezone.utc)
     
     # Определяем период
@@ -351,12 +682,56 @@ async def get_analytics(
         "total_income": total_income,
     }
 
-@router.get("/predictions")
+
+@router.get(
+    "/predictions",
+    response_model=PredictionsResponse,
+    summary="Получить прогнозы на следующий месяц",
+    description="""
+Возвращает прогнозы доходов и расходов на следующий месяц.
+
+**Требуется авторизация.**
+
+**Алгоритм прогнозирования:**
+- Анализируются транзакции за последние 90 дней
+- Используется взвешенное среднее (последние месяцы важнее)
+- Для каждой категории определяется тренд (рост/падение/стабильно)
+
+**Веса по месяцам:**
+- Последний месяц: 50%
+- Предпоследний: 30%  
+- Позапрошлый: 20%
+
+**Тренды категорий:**
+- `up` — рост более 15%
+- `down` — падение более 15%
+- `stable` — изменение в пределах ±15%
+    """,
+    response_description="Прогнозы на следующий месяц",
+    responses={
+        200: {
+            "description": "Успешный ответ с прогнозами",
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        }
+    }
+)
 async def get_predictions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Прогнозы расходов на следующий месяц.
     
+    Использует исторические данные за 90 дней
+    для построения прогноза с учётом трендов.
+    """
     now = datetime.now(timezone.utc)
     start_date = now - timedelta(days=90)
     
@@ -487,12 +862,55 @@ async def get_predictions(
         "recommendations": [],
     }
 
-@router.get("/tips")
+
+@router.get(
+    "/tips",
+    response_model=TipsResponse,
+    summary="Получить советы по экономии",
+    description="""
+Возвращает персонализированные советы по экономии на основе анализа расходов.
+
+**Требуется авторизация.**
+
+**Источники рекомендаций:**
+1. **ML-модель** (если загружена) — анализирует паттерны расходов
+2. **Правила** — срабатывают при превышении порогов:
+   - Расходы > 90% доходов → критический уровень
+   - Расходы > 70% доходов → выше нормы
+   - Развлечения/шоппинг > 20% → высокие траты
+   - Еда > 35% → много на еду
+   - Транспорт > 15% → оптимизация
+
+**Приоритеты:**
+- `high` — потенциальная экономия > 5000 ₽
+- `medium` — экономия 1000-5000 ₽
+- `low` — менее 1000 ₽ или общие советы
+    """,
+    response_description="Список советов по экономии",
+    responses={
+        200: {
+            "description": "Успешный ответ с советами",
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        }
+    }
+)
 async def get_saving_tips(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Советы по экономии на основе ML-модели"""
+    """
+    Советы по экономии на основе ML-модели.
+    
+    Анализирует расходы за 90 дней и генерирует
+    персонализированные рекомендации по экономии.
+    """
     from app.ml.model_loader import registry
     import logging
     logger = logging.getLogger(__name__)

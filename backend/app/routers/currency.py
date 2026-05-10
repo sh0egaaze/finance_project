@@ -3,20 +3,20 @@
 """
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List
 import httpx
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.models import CurrencyRate
 from app.config import get_settings
 
-router = APIRouter(prefix="/currency", tags=["currency"])
+router = APIRouter(prefix="/currency", tags=["Валюты"])
 logger = logging.getLogger(__name__)
 
 # Метаинформация о валютах
@@ -112,6 +112,106 @@ MAIN_CURRENCIES = [
 ]
 
 
+# ===== Pydantic схемы =====
+class CurrencyRateItem(BaseModel):
+    """Схема курса отдельной валюты"""
+    currency: str = Field(..., description="Код валюты (ISO 4217)", examples=["USD"])
+    rate: float = Field(..., description="Курс к рублю", examples=[92.50])
+    change: float = Field(..., description="Изменение курса в % за период", examples=[0.35])
+    name: str = Field(..., description="Название валюты", examples=["Доллар США"])
+    flag: str = Field(..., description="Эмодзи-флаг страны", examples=["🇺🇸"])
+
+
+class RatesResponse(BaseModel):
+    """Схема ответа со списком курсов валют"""
+    base: str = Field(..., description="Базовая валюта", examples=["RUB"])
+    date: str = Field(..., description="Дата и время обновления (ISO 8601)", examples=["2024-01-15T12:00:00+00:00"])
+    rates: List[CurrencyRateItem] = Field(..., description="Список курсов валют")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "base": "RUB",
+                    "date": "2024-01-15T12:00:00+00:00",
+                    "rates": [
+                        {"currency": "USD", "rate": 92.50, "change": 0.35, "name": "Доллар США", "flag": "🇺🇸"},
+                        {"currency": "EUR", "rate": 100.20, "change": -0.15, "name": "Евро", "flag": "🇪🇺"}
+                    ]
+                }
+            ]
+        }
+    }
+
+
+class ConvertRequest(BaseModel):
+    """Схема запроса на конвертацию валюты"""
+    amount: float = Field(
+        ...,
+        gt=0,
+        description="Сумма для конвертации",
+        examples=[1000.0]
+    )
+    from_currency: str = Field(
+        "RUB",
+        min_length=3,
+        max_length=3,
+        description="Исходная валюта (ISO 4217)",
+        examples=["RUB"]
+    )
+    to_currency: str = Field(
+        "USD",
+        min_length=3,
+        max_length=3,
+        description="Целевая валюта (ISO 4217)",
+        examples=["USD"]
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "amount": 10000.0,
+                    "from_currency": "RUB",
+                    "to_currency": "USD"
+                }
+            ]
+        }
+    }
+
+
+class ConvertResponse(BaseModel):
+    """Схема ответа конвертации валюты"""
+    from_currency: str = Field(..., description="Исходная валюта", examples=["RUB"])
+    to_currency: str = Field(..., description="Целевая валюта", examples=["USD"])
+    original_amount: float = Field(..., description="Исходная сумма", examples=[10000.0])
+    converted_amount: float = Field(..., description="Сконвертированная сумма", examples=[108.11])
+    result: float = Field(..., description="Результат (алиас converted_amount)", examples=[108.11])
+    rate: float = Field(..., description="Использованный курс конвертации", examples=[0.010811])
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "from_currency": "RUB",
+                    "to_currency": "USD",
+                    "original_amount": 10000.0,
+                    "converted_amount": 108.11,
+                    "result": 108.11,
+                    "rate": 0.010811
+                }
+            ]
+        }
+    }
+
+
+class RefreshResponse(BaseModel):
+    """Схема ответа обновления курсов"""
+    message: str = Field(..., description="Статус обновления", examples=["Курсы обновлены"])
+    updated_at: str = Field(..., description="Время обновления (ISO 8601)", examples=["2024-01-15T12:00:00+00:00"])
+
+
+# ===== Вспомогательные функции =====
 async def fetch_rates_from_api() -> Optional[dict]:
     """Получить курсы из внешнего API"""
     settings = get_settings()
@@ -182,9 +282,60 @@ def get_rate_change(db: Session, currency: str, current_rate: float) -> float:
     return 0.0
 
 
-@router.get("/rates")
+# ===== Эндпоинты =====
+@router.get(
+    "/rates",
+    response_model=RatesResponse,
+    summary="Получить актуальные курсы валют",
+    description="""
+Возвращает актуальные курсы валют относительно рубля (RUB).
+
+**Особенности:**
+- Курсы обновляются автоматически раз в час
+- При отсутствии данных в БД выполняется запрос к внешнему API
+- Для каждой валюты показывается изменение курса относительно предыдущего значения
+
+**Поддерживаемые валюты:**
+- Мировые: USD, EUR, GBP, CHF, JPY
+- Азия: CNY, HKD, SGD, KRW, INR, THB
+- СНГ: KZT, BYN, UAH, UZS, GEL, AMD, AZN
+- И другие...
+    """,
+    response_description="Список курсов валют с метаданными",
+    responses={
+        200: {
+            "description": "Успешный ответ с курсами валют",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "base": "RUB",
+                        "date": "2024-01-15T12:00:00+00:00",
+                        "rates": [
+                            {"currency": "USD", "rate": 92.50, "change": 0.35, "name": "Доллар США", "flag": "🇺🇸"},
+                            {"currency": "EUR", "rate": 100.20, "change": -0.15, "name": "Евро", "flag": "🇪🇺"},
+                            {"currency": "CNY", "rate": 12.85, "change": 0.10, "name": "Китайский юань", "flag": "🇨🇳"}
+                        ]
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "Ошибка сервера при получении курсов",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Ошибка базы данных. Попробуйте позже."}
+                }
+            }
+        }
+    }
+)
 async def get_rates(db: Session = Depends(get_db)):
-    """Получить актуальные курсы валют"""
+    """
+    Получить актуальные курсы валют.
+    
+    Возвращает курсы основных мировых валют к рублю.
+    Данные кэшируются в БД и обновляются раз в час.
+    """
     now = datetime.now(timezone.utc)
     
     latest = db.query(CurrencyRate).order_by(desc(CurrencyRate.rate_date)).first()
@@ -237,15 +388,67 @@ async def get_rates(db: Session = Depends(get_db)):
     }
 
 
-class ConvertRequest(BaseModel):
-    amount: float
-    from_currency: str = "RUB"
-    to_currency: str = "USD"
+@router.post(
+    "/convert",
+    response_model=ConvertResponse,
+    summary="Конвертировать валюту",
+    description="""
+Конвертирует сумму из одной валюты в другую.
 
+**Параметры:**
+- `amount` — сумма для конвертации (больше 0)
+- `from_currency` — исходная валюта (по умолчанию RUB)
+- `to_currency` — целевая валюта (по умолчанию USD)
 
-@router.post("/convert")
+**Примеры:**
+- RUB → USD: конвертация рублей в доллары
+- EUR → RUB: конвертация евро в рубли
+- USD → EUR: кросс-конвертация через рубль
+
+Курсы берутся из базы данных (обновляются раз в час).
+    """,
+    response_description="Результат конвертации",
+    responses={
+        200: {
+            "description": "Успешная конвертация",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "from_currency": "RUB",
+                        "to_currency": "USD",
+                        "original_amount": 10000.0,
+                        "converted_amount": 108.11,
+                        "result": 108.11,
+                        "rate": 0.010811
+                    }
+                }
+            }
+        },
+        422: {
+            "description": "Ошибка валидации (некорректная сумма или валюта)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": [
+                            {
+                                "loc": ["body", "amount"],
+                                "msg": "Input should be greater than 0",
+                                "type": "greater_than"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
 async def convert_currency(data: ConvertRequest, db: Session = Depends(get_db)):
-    """Конвертировать валюту"""
+    """
+    Конвертировать валюту.
+    
+    Выполняет конвертацию через рубль как базовую валюту.
+    Использует актуальные курсы из базы данных.
+    """
     amount = data.amount
     from_currency = data.from_currency.upper()
     to_currency = data.to_currency.upper()
@@ -280,9 +483,51 @@ async def convert_currency(data: ConvertRequest, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/refresh")
+@router.post(
+    "/refresh",
+    response_model=RefreshResponse,
+    summary="Принудительно обновить курсы",
+    description="""
+Принудительно обновляет курсы валют из внешнего API.
+
+**Используйте, когда:**
+- Нужны самые свежие курсы
+- Автоматическое обновление не сработало
+- Курсы в БД устарели
+
+**Примечание:** Этот эндпоинт делает запрос к внешнему API, 
+поэтому не рекомендуется вызывать его слишком часто.
+    """,
+    response_description="Статус обновления курсов",
+    responses={
+        200: {
+            "description": "Курсы успешно обновлены",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Курсы обновлены",
+                        "updated_at": "2024-01-15T12:00:00+00:00"
+                    }
+                }
+            }
+        },
+        503: {
+            "description": "Внешний API недоступен",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Не удалось получить курсы из API"}
+                }
+            }
+        }
+    }
+)
 async def refresh_rates(db: Session = Depends(get_db)):
-    """Принудительно обновить курсы из API"""
+    """
+    Принудительно обновить курсы из API.
+    
+    Выполняет запрос к внешнему API курсов валют
+    и сохраняет полученные данные в базу.
+    """
     api_data = await fetch_rates_from_api()
     
     if not api_data:

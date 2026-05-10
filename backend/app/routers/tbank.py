@@ -3,12 +3,12 @@
 """
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Path
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator, Field
-from typing import Optional
+from typing import Optional, List
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -25,7 +25,7 @@ from app.models import User, Transaction, Category, TransactionSource
 from app.routers.auth import get_current_user
 from app.config import get_settings
 
-router = APIRouter(prefix="/tbank", tags=["tbank"])
+router = APIRouter(prefix="/tbank", tags=["Т-Банк"])
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -54,12 +54,15 @@ def _decrypt_token(encrypted: str, salt_b64: str | None, secret_key: str) -> str
     return f.decrypt(encrypted.encode()).decode()
 
 
+# ===== Pydantic схемы =====
 class TBankConnectRequest(BaseModel):
+    """Схема запроса на подключение Т-Банка"""
     token: str = Field(
         ..., 
         min_length=3, 
         max_length=500,
-        description="Т-Банк API токен"
+        description="API токен Т-Банка (начинается с 't.')",
+        examples=["t.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"]
     )
     
     @field_validator("token")
@@ -70,23 +73,133 @@ class TBankConnectRequest(BaseModel):
             raise ValueError("Токен должен начинаться с 't.'")
         return v
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "token": "t.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+                }
+            ]
+        }
+    }
+
 
 class TBankStatusResponse(BaseModel):
-    connected: bool
-    account_id: Optional[str] = None
-    balance: Optional[float] = None
-    message: str
+    """Схема ответа о статусе подключения Т-Банка"""
+    connected: bool = Field(..., description="Подключён ли Т-Банк", examples=[True])
+    account_id: Optional[str] = Field(None, description="ID аккаунта в Т-Банке", examples=["2000000000"])
+    balance: Optional[float] = Field(None, description="Баланс счёта (если доступен)", examples=[150000.50])
+    message: str = Field(..., description="Сообщение о статусе", examples=["Т-Банк подключён"])
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "connected": True,
+                    "account_id": "2000000000",
+                    "balance": 150000.50,
+                    "message": "Т-Банк подключён"
+                }
+            ]
+        }
+    }
+
+
+class TBankDisconnectResponse(BaseModel):
+    """Схема ответа при отключении Т-Банка"""
+    message: str = Field(..., description="Сообщение об успехе", examples=["Т-Банк отключён"])
+
+
+class TBankSyncResponse(BaseModel):
+    """Схема ответа синхронизации"""
+    message: str = Field(..., description="Сообщение о результате", examples=["Синхронизация завершена. Добавлено транзакций: 15"])
+    added: int = Field(..., description="Количество добавленных транзакций", examples=[15])
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "message": "Синхронизация завершена. Добавлено транзакций: 15",
+                    "added": 15
+                }
+            ]
+        }
+    }
 
 
 # ========================================================
 # GET /status — проверка статуса подключения
 # ========================================================
-@router.get("/status", response_model=TBankStatusResponse)
+@router.get(
+    "/status",
+    response_model=TBankStatusResponse,
+    summary="Проверить статус подключения Т-Банка",
+    description="""
+Проверяет текущий статус подключения к API Т-Банка.
+
+**Требуется авторизация.**
+
+**Возвращает:**
+- `connected` — подключён ли аккаунт
+- `account_id` — ID аккаунта (если подключён)
+- `balance` — баланс счёта (если доступен)
+- `message` — текстовое описание статуса
+
+**Возможные статусы:**
+- Т-Банк подключён
+- Т-Банк не подключён
+- Токен истёк / повреждён
+- API временно недоступен
+    """,
+    response_description="Статус подключения Т-Банка",
+    responses={
+        200: {
+            "description": "Успешный ответ со статусом",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "connected": {
+                            "summary": "Подключён",
+                            "value": {
+                                "connected": True,
+                                "account_id": "2000000000",
+                                "balance": 150000.50,
+                                "message": "Т-Банк подключён"
+                            }
+                        },
+                        "not_connected": {
+                            "summary": "Не подключён",
+                            "value": {
+                                "connected": False,
+                                "account_id": None,
+                                "balance": None,
+                                "message": "Т-Банк не подключён"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        }
+    }
+)
 async def get_tbank_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Проверка текущего подключения Т-Банка"""
+    """
+    Проверка текущего подключения Т-Банка.
+    
+    Проверяет наличие сохранённого токена и его валидность
+    через запрос к API Т-Банка.
+    """
     if not current_user.tbank_token_encrypted:
         return {
             "connected": False,
@@ -181,7 +294,88 @@ async def get_tbank_status(
 # ========================================================
 # POST /connect — подключение Т-Банка
 # ========================================================
-@router.post("/connect", response_model=TBankStatusResponse)
+@router.post(
+    "/connect",
+    response_model=TBankStatusResponse,
+    summary="Подключить Т-Банк",
+    description="""
+Подключает аккаунт Т-Банка для автоматической синхронизации транзакций.
+
+**Требуется авторизация.**
+
+**Как получить токен:**
+1. Зайдите в [T-Bank API](https://www.tbank.ru/invest/settings/api/)
+2. Создайте новый токен с правами на чтение операций
+3. Скопируйте токен (начинается с `t.`)
+
+**Безопасность:**
+- Токен шифруется с использованием PBKDF2 + Fernet
+- Сервер не хранит токен в открытом виде
+- Используется отдельный salt для каждого пользователя
+
+**Лимит:** 3 запроса в минуту на IP.
+    """,
+    response_description="Результат подключения",
+    responses={
+        200: {
+            "description": "Т-Банк успешно подключён",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "connected": True,
+                        "account_id": "sandbox-account",
+                        "balance": None,
+                        "message": "Т-Банк успешно подключён"
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Невалидный токен",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Токен невалиден. T-Bank API вернул статус 401"}
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        },
+        422: {
+            "description": "Ошибка валидации (неверный формат токена)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": [
+                            {"loc": ["body", "token"], "msg": "Токен должен начинаться с 't.'"}
+                        ]
+                    }
+                }
+            }
+        },
+        429: {
+            "description": "Превышен лимит запросов",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Rate limit exceeded: 3 per 1 minute"}
+                }
+            }
+        },
+        504: {
+            "description": "Т-Банк API недоступен",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "T-Bank API недоступен. Попробуйте позже."}
+                }
+            }
+        }
+    }
+)
 @limiter.limit("3/minute")
 async def connect_tbank(
     request: Request,
@@ -189,7 +383,12 @@ async def connect_tbank(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Подключение Т-Банка"""
+    """
+    Подключение Т-Банка.
+    
+    Проверяет валидность токена через API Т-Банка,
+    шифрует и сохраняет его в базе данных.
+    """
     _s = get_settings()
     
     # Проверяем токен через T-Bank API
@@ -239,12 +438,52 @@ async def connect_tbank(
 # ========================================================
 # POST /disconnect — отключение Т-Банка
 # ========================================================
-@router.post("/disconnect")
+@router.post(
+    "/disconnect",
+    response_model=TBankDisconnectResponse,
+    summary="Отключить Т-Банк",
+    description="""
+Отключает интеграцию с Т-Банком.
+
+**Требуется авторизация.**
+
+**Что происходит:**
+- Удаляется сохранённый токен
+- Автоматическая синхронизация прекращается
+- Ранее синхронизированные транзакции остаются в системе
+
+Для повторного подключения потребуется новый токен.
+    """,
+    response_description="Подтверждение отключения",
+    responses={
+        200: {
+            "description": "Т-Банк успешно отключён",
+            "content": {
+                "application/json": {
+                    "example": {"message": "Т-Банк отключён"}
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        }
+    }
+)
 async def disconnect_tbank(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Отключение Т-Банка"""
+    """
+    Отключение Т-Банка.
+    
+    Удаляет сохранённый токен из базы данных.
+    Синхронизированные ранее транзакции не удаляются.
+    """
     current_user.tbank_token_encrypted = None
     current_user.tbank_token_salt = None
     current_user.updated_at = datetime.now(timezone.utc)
@@ -256,14 +495,98 @@ async def disconnect_tbank(
 # ========================================================
 # POST /sync — синхронизация транзакций
 # ========================================================
-@router.post("/sync")
+@router.post(
+    "/sync",
+    response_model=TBankSyncResponse,
+    summary="Синхронизировать транзакции",
+    description="""
+Синхронизирует транзакции из Т-Банка за последние 30 дней.
+
+**Требуется авторизация и подключённый Т-Банк.**
+
+**Процесс синхронизации:**
+1. Загружаются операции за последние 30 дней
+2. Дубликаты автоматически пропускаются (по ID операции)
+3. Категории определяются автоматически по MCC-коду
+4. Транзакции помечаются источником `TBANK`
+
+**Автоматическая категоризация:**
+Транзакции категоризируются по MCC-кодам:
+- 5411-5462 → Еда и продукты
+- 5812-5814 → Рестораны
+- 4111-4784 → Транспорт
+- и т.д.
+
+**Лимит:** 5 запросов в минуту на IP.
+    """,
+    response_description="Результат синхронизации",
+    responses={
+        200: {
+            "description": "Синхронизация завершена",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Синхронизация завершена. Добавлено транзакций: 15",
+                        "added": 15
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Т-Банк не подключён",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Т-Банк не подключён. Сначала подключитесь в настройках."}
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        },
+        429: {
+            "description": "Превышен лимит запросов",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Rate limit exceeded: 5 per 1 minute"}
+                }
+            }
+        },
+        500: {
+            "description": "Ошибка синхронизации",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "token_error": {
+                            "summary": "Ошибка токена",
+                            "value": {"detail": "Токен повреждён. Переподключите Т-Банк."}
+                        },
+                        "api_error": {
+                            "summary": "Ошибка API",
+                            "value": {"detail": "Ошибка синхронизации с T-Bank API"}
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 @limiter.limit("5/minute")
 async def sync_tbank(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Синхронизация транзакций с Т-Банком (через Sandbox API)"""
+    """
+    Синхронизация транзакций с Т-Банком.
+    
+    Загружает операции за последние 30 дней и добавляет
+    новые транзакции в базу данных с автоматической категоризацией.
+    """
     if not current_user.tbank_token_encrypted:
         raise HTTPException(
             status_code=400, 

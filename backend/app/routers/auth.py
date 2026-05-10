@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from slowapi import Limiter
@@ -15,7 +15,7 @@ from slowapi.util import get_remote_address
 from app.database import get_db
 from app.models import User, Category
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["Авторизация"])
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -37,9 +37,24 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 # ======== Pydantic модели ========
 class UserCreate(BaseModel):
-    email: EmailStr
-    password: str
-    full_name: Optional[str] = None
+    """Схема для регистрации нового пользователя"""
+    email: EmailStr = Field(
+        ...,
+        description="Email пользователя (используется для входа)",
+        examples=["user@example.com"]
+    )
+    password: str = Field(
+        ...,
+        min_length=12,
+        description="Пароль (мин. 12 символов, цифра, заглавная буква, спецсимвол)",
+        examples=["SecurePass123!"]
+    )
+    full_name: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="Полное имя пользователя",
+        examples=["Иван Иванов"]
+    )
 
     @field_validator("password")
     @classmethod
@@ -54,27 +69,70 @@ class UserCreate(BaseModel):
             raise ValueError("Пароль должен содержать спецсимволы (!@#$%^*...)")
         return v
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "email": "user@example.com",
+                    "password": "SecurePass123!",
+                    "full_name": "Иван Иванов"
+                }
+            ]
+        }
+    }
+
 
 class UserResponse(BaseModel):
-    id: int
-    email: str
-    full_name: Optional[str]
-    is_active: bool
-    email_notifications: bool
-    tbank_connected: bool = False
+    """Схема ответа с данными пользователя"""
+    id: int = Field(..., description="Уникальный идентификатор пользователя", examples=[1])
+    email: str = Field(..., description="Email пользователя", examples=["user@example.com"])
+    full_name: Optional[str] = Field(None, description="Полное имя", examples=["Иван Иванов"])
+    is_active: bool = Field(..., description="Активен ли аккаунт", examples=[True])
+    email_notifications: bool = Field(..., description="Включены ли email-уведомления", examples=[True])
+    tbank_connected: bool = Field(False, description="Подключён ли Т-Банк", examples=[False])
 
     class Config:
         from_attributes = True
 
 
 class Token(BaseModel):
-    access_token: str
-    token_type: str
+    """Схема JWT токена"""
+    access_token: str = Field(
+        ...,
+        description="JWT access токен для авторизации",
+        examples=["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."]
+    )
+    token_type: str = Field(
+        ...,
+        description="Тип токена",
+        examples=["bearer"]
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZXhwIjoxNjk5OTk5OTk5fQ.abc123",
+                    "token_type": "bearer"
+                }
+            ]
+        }
+    }
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+    """Схема для входа в систему"""
+    email: EmailStr = Field(
+        ...,
+        description="Email пользователя",
+        examples=["user@example.com"]
+    )
+    password: str = Field(
+        ...,
+        description="Пароль пользователя",
+        examples=["SecurePass123!"]
+    )
+
 
 DEFAULT_CATEGORIES = [
     {"code": "food",           "name": "Еда и продукты",       "icon": "🍔", "color": "#ef4444", "is_expense": True},
@@ -99,6 +157,7 @@ DEFAULT_CATEGORIES = [
     {"code": "salary",         "name": "Зарплата и доход",      "icon": "💰", "color": "#16a34a", "is_income": True, "is_expense": False},
     {"code": "transfers",      "name": "Переводы",              "icon": "🔄", "color": "#2563eb", "is_income": True, "is_expense": True},
 ]
+
 
 def create_default_categories(user_id: int, db: Session):
     for cat_data in DEFAULT_CATEGORIES:
@@ -186,10 +245,77 @@ async def get_current_user(
 
 
 # ======== Эндпоинты ========
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Регистрация нового пользователя",
+    description="""
+Создаёт нового пользователя в системе.
+
+**Требования к паролю:**
+- Минимум 12 символов
+- Хотя бы одна цифра
+- Хотя бы одна заглавная буква
+- Хотя бы один спецсимвол (!@#$%^&*()-_+=)
+
+**Лимит:** 5 запросов в час на IP-адрес.
+
+При успешной регистрации автоматически создаются стандартные категории расходов/доходов.
+    """,
+    response_description="Данные созданного пользователя",
+    responses={
+        201: {
+            "description": "Пользователь успешно создан",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": 1,
+                        "email": "user@example.com",
+                        "full_name": "Иван Иванов",
+                        "is_active": True,
+                        "email_notifications": True,
+                        "tbank_connected": False
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Ошибка валидации или пользователь уже существует",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "user_exists": {
+                            "summary": "Пользователь существует",
+                            "value": {"detail": "Пользователь с таким email уже зарегистрирован"}
+                        },
+                        "weak_password": {
+                            "summary": "Слабый пароль",
+                            "value": {"detail": [{"loc": ["body", "password"], "msg": "Пароль должен содержать не менее 12 символов"}]}
+                        }
+                    }
+                }
+            }
+        },
+        429: {
+            "description": "Превышен лимит запросов",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Rate limit exceeded: 5 per 1 hour"}
+                }
+            }
+        }
+    }
+)
 @limiter.limit("5/hour")
 async def register(request: Request, data: UserCreate, db: Session = Depends(get_db)):
-    """Регистрация нового пользователя"""
+    """
+    Регистрация нового пользователя.
+    
+    Создаёт учётную запись с указанным email и паролем.
+    После регистрации пользователю автоматически создаются
+    стандартные категории для учёта расходов и доходов.
+    """
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
         raise HTTPException(
@@ -224,14 +350,75 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
     )
 
 
-@router.post("/token", response_model=Token)
+@router.post(
+    "/token",
+    response_model=Token,
+    summary="Авторизация и получение токена",
+    description="""
+Аутентификация пользователя по email и паролю.
+
+**Формат запроса:** `application/x-www-form-urlencoded`
+- `username` — email пользователя
+- `password` — пароль
+
+**Защита от брутфорса:**
+- После 5 неудачных попыток аккаунт блокируется на 15 минут
+- Лимит: 10 запросов в минуту на IP
+
+**Использование токена:**
+Authorization: Bearer <access_token>
+    """,
+    response_description="JWT токен для авторизации",
+    responses={
+        200: {
+            "description": "Успешная авторизация",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        "token_type": "bearer"
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Неверные учётные данные",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Неверный email или пароль"}
+                }
+            }
+        },
+        403: {
+            "description": "Аккаунт деактивирован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Аккаунт деактивирован"}
+                }
+            }
+        },
+        429: {
+            "description": "Слишком много попыток входа",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Аккаунт временно заблокирован. Попробуйте через 15 минут."}
+                }
+            }
+        }
+    }
+)
 @limiter.limit("10/minute")
 async def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    """Аутентификация пользователя и получение JWT-токена"""
+    """
+    Аутентификация пользователя и получение JWT-токена.
+    
+    Принимает email (в поле username) и пароль.
+    Возвращает access_token для использования в защищённых эндпоинтах.
+    """
     # Проверка лимита неудачных попыток
     check_login_attempts(form_data.username)
 
@@ -261,9 +448,58 @@ async def login(
     return Token(access_token=access_token, token_type="bearer")
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Получение текущего пользователя",
+    description="""
+Возвращает информацию о текущем авторизованном пользователе.
+
+**Требуется авторизация** — передайте JWT токен в заголовке:
+Authorization: Bearer <token>
+    """,
+    response_description="Данные текущего пользователя",
+    responses={
+        200: {
+            "description": "Успешный ответ",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": 1,
+                        "email": "user@example.com",
+                        "full_name": "Иван Иванов",
+                        "is_active": True,
+                        "email_notifications": True,
+                        "tbank_connected": False
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован или токен недействителен",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        },
+        403: {
+            "description": "Аккаунт деактивирован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Аккаунт деактивирован"}
+                }
+            }
+        }
+    }
+)
 async def get_me(current_user: User = Depends(get_current_user)):
-    """Получение информации о текущем пользователе"""
+    """
+    Получение информации о текущем пользователе.
+    
+    Возвращает профиль авторизованного пользователя,
+    включая статус подключения к Т-Банку.
+    """
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
@@ -273,19 +509,100 @@ async def get_me(current_user: User = Depends(get_current_user)):
         tbank_connected=bool(current_user.tbank_token_encrypted),
     )
 
+
 class ProfileUpdate(BaseModel):
-    full_name: Optional[str] = None
-    email_notifications: Optional[bool] = None
-    notification_email: Optional[str] = None
+    """Схема для обновления профиля пользователя"""
+    full_name: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="Полное имя пользователя",
+        examples=["Иван Иванов"]
+    )
+    email_notifications: Optional[bool] = Field(
+        None,
+        description="Включить/выключить email-уведомления",
+        examples=[True]
+    )
+    notification_email: Optional[str] = Field(
+        None,
+        description="Email для уведомлений (если отличается от основного)",
+        examples=["notifications@example.com"]
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "full_name": "Иван Петров",
+                    "email_notifications": True
+                }
+            ]
+        }
+    }
 
 
-@router.put("/me", response_model=UserResponse)
+@router.put(
+    "/me",
+    response_model=UserResponse,
+    summary="Обновление профиля",
+    description="""
+Обновляет данные профиля текущего пользователя.
+
+**Требуется авторизация.**
+
+Можно обновить:
+- `full_name` — полное имя
+- `email_notifications` — настройка email-уведомлений
+- `notification_email` — альтернативный email для уведомлений
+
+Передавайте только те поля, которые нужно изменить.
+    """,
+    response_description="Обновлённые данные пользователя",
+    responses={
+        200: {
+            "description": "Профиль успешно обновлён",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": 1,
+                        "email": "user@example.com",
+                        "full_name": "Иван Петров",
+                        "is_active": True,
+                        "email_notifications": True,
+                        "tbank_connected": False
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        },
+        422: {
+            "description": "Ошибка валидации данных",
+            "content": {
+                "application/json": {
+                    "example": {"detail": [{"loc": ["body", "full_name"], "msg": "String should have at most 100 characters"}]}
+                }
+            }
+        }
+    }
+)
 async def update_profile(
     data: ProfileUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Обновление профиля пользователя"""
+    """
+    Обновление профиля пользователя.
+    
+    Позволяет изменить имя и настройки уведомлений.
+    Обновляются только переданные поля.
+    """
     update_data = data.model_dump(exclude_unset=True)
     
     for field, value in update_data.items():
@@ -303,9 +620,20 @@ async def update_profile(
         tbank_connected=bool(current_user.tbank_token_encrypted),
     )
 
+
 class PasswordChange(BaseModel):
-    current_password: str
-    new_password: str
+    """Схема для смены пароля"""
+    current_password: str = Field(
+        ...,
+        description="Текущий пароль пользователя",
+        examples=["OldSecurePass123!"]
+    )
+    new_password: str = Field(
+        ...,
+        min_length=12,
+        description="Новый пароль (мин. 12 символов, цифра, заглавная буква, спецсимвол)",
+        examples=["NewSecurePass456!"]
+    )
 
     @field_validator("new_password")
     @classmethod
@@ -320,14 +648,82 @@ class PasswordChange(BaseModel):
             raise ValueError("Пароль должен содержать спецсимволы (!@#$%^*...)")
         return v
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "current_password": "OldSecurePass123!",
+                    "new_password": "NewSecurePass456!"
+                }
+            ]
+        }
+    }
 
-@router.post("/change-password")
+
+@router.post(
+    "/change-password",
+    summary="Смена пароля",
+    description="""
+Изменяет пароль текущего пользователя.
+
+**Требуется авторизация.**
+
+**Требования к новому паролю:**
+- Минимум 12 символов
+- Хотя бы одна цифра
+- Хотя бы одна заглавная буква
+- Хотя бы один спецсимвол (!@#$%^&*()-_+=)
+
+Для смены пароля необходимо указать текущий пароль.
+    """,
+    response_description="Подтверждение смены пароля",
+    responses={
+        200: {
+            "description": "Пароль успешно изменён",
+            "content": {
+                "application/json": {
+                    "example": {"message": "Пароль успешно изменён"}
+                }
+            }
+        },
+        400: {
+            "description": "Неверный текущий пароль или слабый новый пароль",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "wrong_password": {
+                            "summary": "Неверный текущий пароль",
+                            "value": {"detail": "Неверный текущий пароль"}
+                        },
+                        "weak_password": {
+                            "summary": "Слабый новый пароль",
+                            "value": {"detail": [{"loc": ["body", "new_password"], "msg": "Пароль должен содержать не менее 12 символов"}]}
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Не авторизован",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Недействительный токен"}
+                }
+            }
+        }
+    }
+)
 async def change_password(
     data: PasswordChange,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Смена пароля пользователя"""
+    """
+    Смена пароля пользователя.
+    
+    Проверяет текущий пароль и устанавливает новый.
+    Новый пароль должен соответствовать требованиям безопасности.
+    """
     # Проверяем текущий пароль
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(
