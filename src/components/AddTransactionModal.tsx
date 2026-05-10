@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { X } from 'lucide-react';
 import { Category } from '../api';
 
 interface AddTransactionModalProps {
@@ -15,57 +15,13 @@ interface AddTransactionModalProps {
   onClose: () => void;
 }
 
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  FOOD: ['еда', 'кофе', 'обед', 'ужин', 'завтрак', 'ресторан', 'кафе', 'продукты', 'магазин', 'пятёрочка', 'магнит', 'перекрёсток', 'булочка', 'пицца', 'суши', 'кола', 'бургер'],
-  TRANSPORT: ['такси', 'метро', 'автобус', 'бензин', 'заправка', 'транспорт', 'яндекс драйв', 'uber', 'bolt'],
-  ENTERTAINMENT: ['кино', 'театр', 'концерт', 'развлечения', 'игры', 'netflix', 'spotify', 'подписка'],
-  SHOPPING: ['одежда', 'обувь', 'покупки', 'wildberries', 'ozon', 'aliexpress', 'zara', 'hm'],
-  UTILITIES: ['жкх', 'коммунальные', 'квартплата', 'интернет', 'электричество', 'газ', 'вода'],
-  HEALTH: ['аптека', 'лекарства', 'врач', 'больница', 'анализы', 'стоматолог'],
-  EDUCATION: ['курсы', 'обучение', 'книги', 'школа', 'университет'],
-  TRAVEL: ['отель', 'билеты', 'путешествие', 'отдых', 'самолёт', 'поезд'],
-  INCOME: ['зарплата', 'перевод', 'доход', 'фриланс', 'премия'],
-  SALARY: ['зарплата', 'аванс', 'оклад'],
-};
-
-function categorizeDescription(description: string, categories: Category[]): { category: Category | null; confidence: number } {
-  const lowerDesc = description.toLowerCase();
-  
-  for (const [code, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    for (const keyword of keywords) {
-      if (lowerDesc.includes(keyword)) {
-        const cat = categories.find(c => c.code === code);
-        return { category: cat || null, confidence: 0.85 };
-      }
-    }
-  }
-  
-  const otherCat = categories.find(c => c.code === 'OTHER');
-  return { category: otherCat || null, confidence: 0.5 };
-}
-
 export default function AddTransactionModal({ categories, onSubmit, onClose }: AddTransactionModalProps) {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [type, setType] = useState<'income' | 'expense'>('expense');
-  const [source, setSource] = useState<string>('manual');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [aiSuggestion, setAiSuggestion] = useState<{ category: Category | null; confidence: number } | null>(null);
-
-  // Auto-categorize when description changes
-  useEffect(() => {
-    if (description.length > 2 && categories.length > 0) {
-      const suggestion = categorizeDescription(description, categories);
-      setAiSuggestion(suggestion);
-      if (!categoryId && suggestion.category) {
-        setCategoryId(suggestion.category.id);
-      }
-    } else {
-      setAiSuggestion(null);
-    }
-  }, [description, categories]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,7 +34,7 @@ export default function AddTransactionModal({ categories, onSubmit, onClose }: A
         description,
         category_id: categoryId,
         type,
-        source,
+        source: 'manual',
         date,
       });
       onClose();
@@ -108,7 +64,7 @@ export default function AddTransactionModal({ categories, onSubmit, onClose }: A
           <div className="flex bg-gray-100 rounded-lg p-1">
             <button
               type="button"
-              onClick={() => setType('expense')}
+              onClick={() => { setType('expense'); setCategoryId(null); }}
               className={`flex-1 py-2 rounded-md transition-colors ${
                 type === 'expense' ? 'bg-red-500 text-white' : 'text-gray-600'
               }`}
@@ -117,7 +73,7 @@ export default function AddTransactionModal({ categories, onSubmit, onClose }: A
             </button>
             <button
               type="button"
-              onClick={() => setType('income')}
+              onClick={() => { setType('income'); setCategoryId(null); }}
               className={`flex-1 py-2 rounded-md transition-colors ${
                 type === 'income' ? 'bg-green-500 text-white' : 'text-gray-600'
               }`}
@@ -139,15 +95,6 @@ export default function AddTransactionModal({ categories, onSubmit, onClose }: A
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               required
             />
-            {aiSuggestion && aiSuggestion.category && (
-              <div className="flex items-center gap-2 mt-2 text-sm text-blue-600">
-                <Sparkles className="w-4 h-4" />
-                <span>
-                  ИИ определил категорию: {aiSuggestion.category.icon} {aiSuggestion.category.name}
-                  ({Math.round(aiSuggestion.confidence * 100)}%)
-                </span>
-              </div>
-            )}
           </div>
 
           {/* Amount */}
@@ -173,51 +120,21 @@ export default function AddTransactionModal({ categories, onSubmit, onClose }: A
           {/* Category */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Категория
+              Категория *
             </label>
             <select
               value={categoryId || ''}
               onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              required
             >
-              <option value="">Автоопределение</option>
+              <option value="">Выберите категорию</option>
               {displayCategories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.icon} {cat.name}
                 </option>
               ))}
             </select>
-          </div>
-
-          {/* Source */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Источник
-            </label>
-            <div className="flex gap-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="source"
-                  value="manual"
-                  checked={source === 'manual'}
-                  onChange={() => setSource('manual')}
-                  className="text-blue-600"
-                />
-                <span>Вручную</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="source"
-                  value="tbank_api"
-                  checked={source === 'tbank_api'}
-                  onChange={() => setSource('tbank_api')}
-                  className="text-blue-600"
-                />
-                <span>Т-Банк</span>
-              </label>
-            </div>
           </div>
 
           {/* Date */}
@@ -244,7 +161,7 @@ export default function AddTransactionModal({ categories, onSubmit, onClose }: A
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !description || !amount}
+              disabled={isSubmitting || !description || !amount || !categoryId}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
               {isSubmitting ? 'Добавление...' : 'Добавить'}

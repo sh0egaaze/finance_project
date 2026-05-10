@@ -148,30 +148,56 @@ async def delete_transaction(
             detail="Ошибка при удалении транзакции"
         )
 
-@router.get("", response_model=list[TransactionResponse])
+@router.get("")
 async def get_transactions(
     limit: int = Query(20, ge=1, le=100, description="Макс. кол-во записей"),
     offset: int = Query(0, ge=0, description="Смещение"),
+    is_suspicious: Optional[bool] = Query(None, description="Фильтр по подозрительности"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Получение списка транзакций с пагинацией"""
-    transactions = db.query(Transaction).filter(
+    query = db.query(Transaction).filter(
         Transaction.user_id == user.id
-    ).order_by(
+    )
+    
+    if is_suspicious is not None:
+        query = query.filter(Transaction.is_suspicious == is_suspicious)
+    
+    total = query.count()
+    
+    transactions = query.order_by(
         Transaction.transaction_date.desc()
     ).offset(offset).limit(limit).all()
     
-    return transactions
+    items = []
+    for t in transactions:
+        items.append({
+            "id": t.id,
+            "description": t.description,
+            "amount": float(t.amount),
+            "is_income": t.amount > 0,
+            "category_id": t.category_id,
+            "transaction_date": t.transaction_date.isoformat() if t.transaction_date else None,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "source": t.source,
+            "is_suspicious": t.is_suspicious,
+            "suspicious_reason": t.suspicious_reason,
+        })
+    
+    return {"items": items, "total": total, "page": 1, "per_page": limit}
 
 
-@router.post("", response_model=TransactionResponse, status_code=201)
+@router.post("", status_code=201)
 async def create_transaction(
     data: TransactionCreate,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Создание новой транзакции"""
+    from app.ml.anomaly_detector import detect_anomaly
+    from sqlalchemy import func as sql_func
+    
     tx_date = datetime.now(timezone.utc)
     if data.transaction_date:
         try:
@@ -179,13 +205,74 @@ async def create_transaction(
         except ValueError:
             pass
     
+    amount = data.amount if data.is_income else -data.amount
+    
     tx = Transaction(
         user_id=user.id,
         description=data.description,
-        amount=data.amount if data.is_income else -data.amount,
+        amount=amount,
         category_id=data.category_id,
         transaction_date=tx_date,
     )
+    
+    # === Проверка на подозрительность ===
+    abs_amount = abs(float(amount))
+    hour = tx_date.hour
+    day_of_week = tx_date.weekday()
+    
+    # Средняя сумма пользователя за 3 месяца
+    three_months_ago = datetime.now(timezone.utc) - timedelta(days=90)
+    user_avg = db.query(sql_func.avg(sql_func.abs(Transaction.amount))).filter(
+        Transaction.user_id == user.id,
+        Transaction.transaction_date >= three_months_ago
+    ).scalar() or abs_amount
+    
+    # Код категории
+    category_code = "other"
+    if data.category_id:
+        cat = db.query(Category).filter(Category.id == data.category_id).first()
+        if cat:
+            category_code = cat.code
+    
+    # ML проверка
+    try:
+        result = detect_anomaly({
+            "amount": abs_amount,
+            "hour": hour,
+            "day_of_week": day_of_week,
+            "category": category_code,
+            "user_avg_amount": float(user_avg),
+            "is_weekend": 1 if day_of_week >= 5 else 0,
+        })
+        if result.get("is_suspicious"):
+            tx.is_suspicious = True
+            tx.suspicious_reason = result.get("reason") or "Нетипичная транзакция"
+            logger.info(f"Подозрительно: {abs_amount}₽ — {tx.suspicious_reason}")
+    except Exception as e:
+        logger.warning(f"ML недоступен: {e}")
+    
+    # Эвристики (fallback)
+    if not tx.is_suspicious and not data.is_income:
+        # Средняя по категории
+        if data.category_id:
+            cat_avg = db.query(sql_func.avg(sql_func.abs(Transaction.amount))).filter(
+                Transaction.user_id == user.id,
+                Transaction.category_id == data.category_id,
+                Transaction.transaction_date >= three_months_ago
+            ).scalar()
+            if cat_avg and float(cat_avg) > 0 and abs_amount > float(cat_avg) * 3:
+                tx.is_suspicious = True
+                tx.suspicious_reason = f"Сумма в {abs_amount/float(cat_avg):.1f} раз выше средней для этой категории"
+        
+        # Ночное время
+        if not tx.is_suspicious and 2 <= hour <= 5 and abs_amount > 3000:
+            tx.is_suspicious = True
+            tx.suspicious_reason = "Крупная транзакция в ночное время"
+        
+        # Крупная сумма
+        if not tx.is_suspicious and abs_amount > 30000:
+            tx.is_suspicious = True
+            tx.suspicious_reason = f"Крупная сумма: {abs_amount:,.0f}₽".replace(",", " ")
     
     try:
         db.add(tx)
@@ -197,7 +284,16 @@ async def create_transaction(
             status_code=400,
             detail="Ошибка при создании: категория не принадлежит вам"
         )
-    return tx
+    return {
+        "id": tx.id,
+        "description": tx.description,
+        "amount": float(tx.amount),
+        "is_income": float(tx.amount) > 0,
+        "category_id": tx.category_id,
+        "transaction_date": tx.transaction_date.isoformat() if tx.transaction_date else None,
+        "created_at": tx.created_at.isoformat() if tx.created_at else None,
+        "source": tx.source,
+    }
 
 @router.post("/smart-input")
 @limiter.limit("30/minute")

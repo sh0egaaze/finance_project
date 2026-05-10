@@ -164,6 +164,26 @@ async def get_dashboard(
             "next_reminder_date": r.next_reminder_date.isoformat(),
         })
     
+    # Подозрительные транзакции
+    suspicious = db.query(Transaction).options(
+        joinedload(Transaction.category)
+    ).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.is_suspicious == True
+    ).order_by(Transaction.transaction_date.desc()).limit(5).all()
+    
+    suspicious_transactions = []
+    for t in suspicious:
+        suspicious_transactions.append({
+            "id": t.id,
+            "amount": float(t.amount),
+            "description": t.description,
+            "category_id": t.category_id,
+            "category_name": t.category.name if t.category else "Без категории",
+            "transaction_date": t.transaction_date.isoformat(),
+            "suspicious_reason": t.suspicious_reason or "Подозрительная активность",
+        })
+    
     return {
         "stats": {
             "total_balance": total_balance,
@@ -186,7 +206,7 @@ async def get_dashboard(
         ],
         "monthly_trend": monthly_trend,
         "upcoming_reminders": upcoming_reminders,
-        "suspicious_transactions": [],
+        "suspicious_transactions": suspicious_transactions,
         "income_by_category": income_by_category,
     }
 

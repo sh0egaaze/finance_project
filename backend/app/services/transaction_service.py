@@ -243,45 +243,82 @@ class TransactionService:
         user_id: int,
         transaction: Transaction
     ):
-        """
-        Проверить транзакцию на подозрительность.
-        Критерии:
-        - Сумма значительно выше средней в категории
-        - Необычное время (ночь)
-        - Очень крупная сумма
-        """
+        """Проверить транзакцию на подозрительность (ML + эвристики)."""
+        from ..ml.anomaly_detector import detect_anomaly
+
         amount = abs(float(transaction.amount))
-        
-        # Получаем среднюю сумму в категории за последние 3 месяца
+        hour = transaction.transaction_date.hour
+        day_of_week = transaction.transaction_date.weekday()
+
+        # Средняя сумма пользователя за 3 мес
         three_months_ago = datetime.now(timezone.utc) - timedelta(days=90)
-        
+        user_avg = db.query(func.avg(func.abs(Transaction.amount))).filter(
+            and_(
+                Transaction.user_id == user_id,
+                Transaction.transaction_date >= three_months_ago
+            )
+        ).scalar() or amount
+
+        # Код категории для ML
+        category_code = "other"
         if transaction.category_id:
-            avg_amount = db.query(func.avg(func.abs(Transaction.amount))).filter(
+            cat = db.query(Category).filter(
+                Category.id == transaction.category_id
+            ).first()
+            if cat:
+                category_code = cat.code
+
+        # === ML ===
+        try:
+            result = detect_anomaly({
+                "amount":          amount,
+                "hour":            hour,
+                "day_of_week":     day_of_week,
+                "category":        category_code,
+                "user_avg_amount": float(user_avg),
+                "is_weekend":      1 if day_of_week >= 5 else 0,
+            })
+
+            if result.get("is_suspicious"):
+                transaction.is_suspicious = True
+                transaction.suspicious_reason = (
+                    result.get("reason") or
+                    "Нетипичная транзакция для вашего профиля расходов"
+                )
+                logger.info(f"Подозрительно: {amount}₽ — {transaction.suspicious_reason}")
+                return
+
+        except Exception as e:
+            logger.warning(f"ML недоступен: {e}")
+
+        # === Эвристики (fallback) ===
+        if transaction.category_id:
+            cat_avg = db.query(func.avg(func.abs(Transaction.amount))).filter(
                 and_(
                     Transaction.user_id == user_id,
                     Transaction.category_id == transaction.category_id,
                     Transaction.transaction_date >= three_months_ago
                 )
             ).scalar()
-            
-            # Если сумма в 5 раз больше средней - подозрительно
-            if avg_amount and amount > float(avg_amount) * 5:
+            if cat_avg and float(cat_avg) > 0 and amount > float(cat_avg) * 3:
                 transaction.is_suspicious = True
-                transaction.suspicious_reason = f"Сумма в {amount/float(avg_amount):.1f} раз выше средней"
+                transaction.suspicious_reason = (
+                    f"Сумма в {amount/float(cat_avg):.1f} раз "
+                    f"выше средней для этой категории"
+                )
                 return
-        
-        # Проверяем время (2:00 - 5:00 - подозрительное время)
-        hour = transaction.transaction_date.hour
-        if 2 <= hour <= 5 and amount > 5000:
+
+        if 2 <= hour <= 5 and amount > 3000:
             transaction.is_suspicious = True
             transaction.suspicious_reason = "Крупная транзакция в ночное время"
             return
-        
-        # Очень крупная сумма
-        if amount > 50000:
+
+        if amount > 30000:
             transaction.is_suspicious = True
-            transaction.suspicious_reason = "Крупная сумма транзакции"
-    
+            transaction.suspicious_reason = (
+                f"Крупная сумма: {amount:,.0f}₽".replace(",", " ")
+            )
+                
     @staticmethod
     def get_suspicious_transactions(
         db: Session,

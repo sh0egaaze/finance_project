@@ -74,6 +74,8 @@ export interface Transaction {
   transaction_date: string | null;
   created_at: string | null;
   source?: string;
+  is_suspicious?: boolean;
+  suspicious_reason?: string;
 }
 
 export interface TransactionList {

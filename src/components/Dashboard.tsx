@@ -299,9 +299,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
 
         {/* Подозрительные транзакции */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            <h3 className="text-lg font-semibold text-gray-900">Подозрительные</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <h3 className="text-lg font-semibold text-gray-900">Подозрительные</h3>
+            </div>
+            <button
+              onClick={() => onTabChange?.('suspicious')}
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Все подозрительные"
+            >
+              <ArrowRight className="w-5 h-5 text-gray-400 hover:text-blue-500" />
+            </button>
           </div>
           <div className="space-y-3">
             {suspicious_transactions && suspicious_transactions.length > 0 ? (

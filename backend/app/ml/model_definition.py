@@ -39,32 +39,30 @@ class FinanceNLPModel(nn.Module):
         return income_logits, bio_logits
 
 class TransactionAutoencoder(nn.Module):
-    """Предобученный VAE для транзакций anomalies"""
-    def __init__(self, input_dim, hidden_dim=64, latent_dim=8):
+    """VAE для детекции аномалий в транзакциях"""
+    def __init__(self, input_dim, hidden=48, latent=10):
         super().__init__()
         self.input_dim = input_dim
         
-        # Encoder (УБРАЛ Dropout)
         self.encoder = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(input_dim, hidden),
+            nn.BatchNorm1d(hidden),
             nn.GELU(),
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.GELU()
+            nn.Dropout(0.1),
+            nn.Linear(hidden, hidden // 2),
+            nn.GELU(),
         )
         
-        # Latent space (mu and logvar)
-        self.fc_mu = nn.Linear(hidden_dim // 2, latent_dim)
-        self.fc_logvar = nn.Linear(hidden_dim // 2, latent_dim)
+        self.fc_mu     = nn.Linear(hidden // 2, latent)
+        self.fc_logvar = nn.Linear(hidden // 2, latent)
         
-        # Decoder (УБРАЛ Dropout)
         self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim // 2),
+            nn.Linear(latent, hidden // 2),
             nn.GELU(),
-            nn.Linear(hidden_dim // 2, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(hidden // 2, hidden),
+            nn.BatchNorm1d(hidden),
             nn.GELU(),
-            nn.Linear(hidden_dim, input_dim)
+            nn.Linear(hidden, input_dim),
         )
 
     def encode(self, x):
@@ -73,21 +71,9 @@ class TransactionAutoencoder(nn.Module):
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
+        return mu + torch.randn_like(std) * std
 
     def forward(self, x):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
         return self.decoder(z), mu, logvar
-
-    def get_reconstruction_error(self, x):
-        was_training = self.training
-        self.eval()
-        try:
-            with torch.no_grad():
-                recon, mu, logvar = self.forward(x)
-                return torch.mean((x - recon)**2, dim=1)
-        finally:
-            if was_training:
-                self.train()

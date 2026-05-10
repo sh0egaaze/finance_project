@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, XCircle, Eye } from 'lucide-react';
-import { api, Transaction } from '../api';
+import { AlertTriangle, CheckCircle, XCircle, Eye, RefreshCw } from 'lucide-react';
+import { api, Category } from '../api';
+
+interface SuspiciousTransaction {
+  id: number;
+  description: string;
+  amount: number;
+  category_id: number | null;
+  transaction_date: string;
+  suspicious_reason?: string;
+}
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('ru-RU', {
@@ -18,13 +27,19 @@ const formatDate = (dateString: string) => {
 };
 
 export default function SuspiciousTransactions() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<SuspiciousTransaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadSuspicious = async () => {
+  const loadData = async () => {
     try {
-      const data = await api.getTransactions({ is_suspicious: true, limit: 50 });
-      setTransactions(data.items);
+      setIsLoading(true);
+      const [txData, catData] = await Promise.all([
+        api.getTransactions({ is_suspicious: true, limit: 50 }),
+        api.getCategories()
+      ]);
+      setTransactions(txData.items);
+      setCategories(catData);
     } catch (error) {
       console.error('Error loading suspicious transactions:', error);
     } finally {
@@ -33,8 +48,14 @@ export default function SuspiciousTransactions() {
   };
 
   useEffect(() => {
-    loadSuspicious();
+    loadData();
   }, []);
+
+  const getCategoryName = (categoryId: number | null): string => {
+    if (!categoryId) return 'Без категории';
+    const category = categories.find(c => c.id === categoryId);
+    return category?.name || 'Без категории';
+  };
 
   const handleConfirm = async (id: number) => {
     try {
@@ -46,6 +67,7 @@ export default function SuspiciousTransactions() {
   };
 
   const handleReject = async (id: number) => {
+    if (!confirm('Удалить эту транзакцию?')) return;
     try {
       await api.deleteTransaction(id);
       setTransactions(transactions.filter(t => t.id !== id));
@@ -66,11 +88,20 @@ export default function SuspiciousTransactions() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-800">Подозрительные транзакции</h2>
-        {transactions.length > 0 && (
-          <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm">
-            {transactions.length} найдено
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {transactions.length > 0 && (
+            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm">
+              {transactions.length} найдено
+            </span>
+          )}
+          <button
+            onClick={loadData}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Обновить"
+          >
+            <RefreshCw className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
       </div>
 
       {/* Info Card */}
@@ -81,9 +112,9 @@ export default function SuspiciousTransactions() {
             <h3 className="font-medium text-yellow-800">Как определяются подозрительные транзакции?</h3>
             <ul className="text-sm text-yellow-700 mt-2 space-y-1">
               <li>• Сумма значительно выше обычной для категории</li>
-              <li>• Необычное время совершения</li>
-              <li>• Новый продавец с большой суммой</li>
-              <li>• Несколько похожих транзакций подряд</li>
+              <li>• Необычное время совершения (ночь)</li>
+              <li>• Крупная сумма транзакции</li>
+              <li>• Нетипичный паттерн расходов</li>
             </ul>
           </div>
         </div>
@@ -113,7 +144,7 @@ export default function SuspiciousTransactions() {
                       {transaction.description || 'Без описания'}
                     </h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      {transaction.merchant_name || transaction.category?.name || 'Неизвестная категория'}
+                      {getCategoryName(transaction.category_id)}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
                       {formatDate(transaction.transaction_date)}
@@ -128,24 +159,24 @@ export default function SuspiciousTransactions() {
                 </div>
                 <div className="text-right">
                   <p className="text-xl font-bold text-red-600">
-                    -{formatCurrency(transaction.amount)}
+                    {formatCurrency(transaction.amount)}
                   </p>
                   <div className="flex gap-2 mt-3">
                     <button
                       onClick={() => handleConfirm(transaction.id)}
                       className="flex items-center gap-1 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
-                      title="Это моя транзакция"
+                      title="Я узнаю эту транзакцию, убрать из подозрительных"
                     >
                       <CheckCircle className="w-4 h-4" />
-                      <span className="text-sm">Подтвердить</span>
+                      <span className="text-sm">Всё в порядке</span>
                     </button>
                     <button
                       onClick={() => handleReject(transaction.id)}
                       className="flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
-                      title="Это не моя транзакция"
+                      title="Я не совершал эту транзакцию, удалить"
                     >
                       <XCircle className="w-4 h-4" />
-                      <span className="text-sm">Оспорить</span>
+                      <span className="text-sm">Есть подозрения</span>
                     </button>
                   </div>
                 </div>
