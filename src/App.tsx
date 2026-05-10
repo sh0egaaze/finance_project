@@ -73,7 +73,7 @@ export default function App() {
   };
 
   const refreshData = useCallback(() => {
-    setActiveTab(prev => prev + 1);
+      setRefreshKey(prev => prev + 1);
   }, []);
 
   const handleAddTransaction = async (data: {
@@ -138,18 +138,18 @@ export default function App() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-100 flex">
+      return (
+    <div className="h-screen bg-gray-50 flex overflow-hidden">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <Header 
           user={user} 
           onLogout={handleLogout}
           onAddTransaction={() => setIsAddModalOpen(true)}
         />
         
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 p-6 overflow-y-auto">
           {renderContent()}
         </main>
       </div>
