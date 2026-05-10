@@ -155,10 +155,8 @@ class ReminderResponse(BaseModel):
     is_completed: bool = Field(..., description="Завершено ли напоминание", examples=[False])
     send_email: bool = Field(..., description="Отправлять ли email", examples=[True])
 
-    class Config:
-        from_attributes = True
-
     model_config = {
+        "from_attributes": True,
         "json_schema_extra": {
             "examples": [
                 {

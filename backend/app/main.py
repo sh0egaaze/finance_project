@@ -116,7 +116,7 @@ Authorization: Bearer <token>
     openapi_tags=tags_metadata,
     contact={
         "name": "Finance App Support",
-        "email": "support@financeapp.local",
+        "url": "https://github.com/sh0egaaze/finance_project",
     },
     license_info={
         "name": "MIT",

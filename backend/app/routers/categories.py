@@ -27,10 +27,8 @@ class CategoryResponse(BaseModel):
     is_expense: bool = Field(..., description="Категория для расходов", examples=[True])
     is_active: bool = Field(..., description="Активна ли категория", examples=[True])
 
-    class Config:
-        from_attributes = True
-
     model_config = {
+        "from_attributes": True,
         "json_schema_extra": {
             "examples": [
                 {
@@ -187,19 +185,16 @@ async def get_categories(
     Возвращает объединённый список системных и пользовательских категорий.
     При дубликатах по коду приоритет имеют пользовательские категории.
     """
-    # Получаем категории пользователя
     categories = db.query(Category).filter(
         Category.is_active == True,
         (Category.user_id == current_user.id) | (Category.user_id == None)
     ).all()
     
-    # Убираем дубликаты по коду (приоритет у пользовательских)
     seen_codes = {}
     for cat in categories:
         if cat.code not in seen_codes:
             seen_codes[cat.code] = cat
         elif cat.user_id == current_user.id:
-            # Пользовательская категория имеет приоритет
             seen_codes[cat.code] = cat
     
     return list(seen_codes.values())

@@ -132,11 +132,9 @@ class TransactionResponse(BaseModel):
     transaction_date: Optional[datetime] = Field(None, description="Дата транзакции", examples=["2024-01-15T14:30:00+00:00"])
     created_at: datetime = Field(..., description="Дата создания записи", examples=["2024-01-15T14:30:00+00:00"])
     source: Optional[str] = Field(None, description="Источник: MANUAL, TBANK и т.д.", examples=["MANUAL"])
-    
-    class Config:
-        from_attributes = True
 
     model_config = {
+        "from_attributes": True,
         "json_schema_extra": {
             "examples": [
                 {
@@ -209,9 +207,6 @@ class SmartInputRequest(BaseModel):
         description="Текст для парсинга транзакции на естественном языке",
         examples=["кофе 350р", "зарплата 100000", "такси 500 рублей"]
     )
-    
-    class Config:
-        from_attributes = True
 
     model_config = {
         "json_schema_extra": {
@@ -682,7 +677,6 @@ async def update_transaction(
     new_date = update_data.pop('transaction_date', None)
     if new_date:
         try:
-            from datetime import datetime
             tx.transaction_date = datetime.fromisoformat(new_date)
         except ValueError:
             pass
@@ -846,17 +840,14 @@ async def smart_input(
     Парсит текст на естественном языке и возвращает
     распознанные данные для предварительного просмотра.
     """
-    # Подключаем ML-модуль через .get() с проверкой на None
     nlp_parser = registry.get("nlp_parser")
     categorizer = registry.get("categorizer")
     
     if not nlp_parser:
         raise HTTPException(status_code=503, detail="NLP-парсер не загружен")
     
-    # 1. Парсинг текста
     parsed = nlp_parser.parse(data.text)   
     
-    # 2. Категоризация (умная модель загружена)
     category_id = None
     if categorizer and parsed.get("description"): 
         cat_pred = categorize(parsed["description"])
@@ -967,7 +958,6 @@ async def smart_input_confirm(
     if not nlp_parser:
         raise HTTPException(status_code=503, detail="NLP-парсер не загружен")
 
-    # 1. Парсинг текста
     parsed = nlp_parser.parse(data.text)
 
     amount = parsed.get("amount")
@@ -977,7 +967,6 @@ async def smart_input_confirm(
     if not amount or amount <= 0:
         raise HTTPException(status_code=400, detail="Не удалось определить сумму из текста")
 
-    # 2. Категоризация
     category_id = None
     cat_pred = None
     if categorizer and description:
@@ -991,7 +980,6 @@ async def smart_input_confirm(
     if cat_pred and cat_pred.category_code in ("salary", "cash"):
         is_income = True
 
-    # 3. Создание транзакции
     tx = Transaction(
         user_id=user.id,
         description=description,

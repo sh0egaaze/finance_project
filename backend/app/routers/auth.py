@@ -91,8 +91,9 @@ class UserResponse(BaseModel):
     email_notifications: bool = Field(..., description="Включены ли email-уведомления", examples=[True])
     tbank_connected: bool = Field(False, description="Подключён ли Т-Банк", examples=[False])
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class Token(BaseModel):
@@ -197,7 +198,6 @@ def check_login_attempts(email: str) -> None:
             detail=f"Аккаунт временно заблокирован. Попробуйте через {int(remaining.total_seconds() // 60)} минут."
         )
     if lockout_until and datetime.now(timezone.utc) >= lockout_until:
-        # Блокировка истекла — сбрасываем счётчик
         LOGIN_ATTEMPTS.pop(email, None)
         LOGIN_LOCKOUT_UNTIL.pop(email, None)
 
@@ -419,7 +419,6 @@ async def login(
     Принимает email (в поле username) и пароль.
     Возвращает access_token для использования в защищённых эндпоинтах.
     """
-    # Проверка лимита неудачных попыток
     check_login_attempts(form_data.username)
 
     user = db.query(User).filter(User.email == form_data.username).first()
@@ -437,10 +436,8 @@ async def login(
             detail="Аккаунт деактивирован",
         )
 
-    # Успешный вход — сбрасываем счётчик
     reset_login_attempts(form_data.username)
 
-    # Обновляем last_login
     user.last_login = datetime.now(timezone.utc)
     db.commit()
 
@@ -724,14 +721,12 @@ async def change_password(
     Проверяет текущий пароль и устанавливает новый.
     Новый пароль должен соответствовать требованиям безопасности.
     """
-    # Проверяем текущий пароль
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Неверный текущий пароль"
         )
     
-    # Устанавливаем новый пароль
     current_user.hashed_password = get_password_hash(data.new_password)
     current_user.updated_at = datetime.now(timezone.utc)
     db.commit()
