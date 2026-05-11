@@ -95,6 +95,7 @@ class UserResponse(BaseModel):
     email: str = Field(..., description="Email пользователя", examples=["user@example.com"])
     full_name: Optional[str] = Field(None, description="Полное имя", examples=["Иван Иванов"])
     is_active: bool = Field(..., description="Активен ли аккаунт", examples=[True])
+    is_superuser: bool = Field(False, description="Является ли администратором", examples=[False])
     email_verified: bool = Field(False, description="Подтверждён ли email", examples=[False])
     email_notifications: bool = Field(..., description="Включены ли email-уведомления", examples=[True])
     tbank_connected: bool = Field(False, description="Подключён ли Т-Банк", examples=[False])
@@ -381,6 +382,7 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
         email=user.email,
         full_name=user.full_name,
         is_active=user.is_active,
+        is_superuser=user.is_superuser,
         email_verified=user.email_verified or False,
         email_notifications=user.email_notifications,
         tbank_connected=bool(user.tbank_token_encrypted),
@@ -663,6 +665,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
         email=current_user.email,
         full_name=current_user.full_name,
         is_active=current_user.is_active,
+        is_superuser=current_user.is_superuser,
         email_verified=current_user.email_verified or False,
         email_notifications=current_user.email_notifications,
         tbank_connected=bool(current_user.tbank_token_encrypted),
@@ -711,6 +714,7 @@ async def update_profile(
         email=current_user.email,
         full_name=current_user.full_name,
         is_active=current_user.is_active,
+        is_superuser=current_user.is_superuser,
         email_verified=current_user.email_verified or False,
         email_notifications=current_user.email_notifications,
         tbank_connected=bool(current_user.tbank_token_encrypted),

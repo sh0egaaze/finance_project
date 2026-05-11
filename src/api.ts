@@ -44,6 +44,7 @@ export interface User {
   email: string;
   full_name: string | null;
   is_active: boolean;
+  is_superuser: boolean;
   email_verified: boolean;
   email_notifications: boolean;
   notification_email: string | null;
@@ -276,6 +277,66 @@ export interface SmartInputResult {
   is_income: boolean;
 }
 
+// ============ Admin Types ============
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  full_name: string | null;
+  is_active: boolean;
+  is_superuser: boolean;
+  email_verified: boolean;
+  email_notifications: boolean;
+  tbank_connected: boolean;
+  transactions_count: number;
+  created_at: string | null;
+  last_login: string | null;
+}
+
+export interface AdminUserList {
+  items: AdminUser[];
+  total: number;
+}
+
+export interface AdminStats {
+  total_users: number;
+  active_users: number;
+  verified_users: number;
+  total_transactions: number;
+  total_reminders: number;
+  total_categories: number;
+  users_today: number;
+  users_this_week: number;
+  users_this_month: number;
+  active_today: number;
+  active_this_week: number;
+  transactions_today: number;
+  transactions_this_week: number;
+  transactions_this_month: number;
+  total_income: number;
+  total_expense: number;
+  tbank_connected_count: number;
+}
+
+export interface AuditLogEntry {
+  id: number;
+  user_id: number | null;
+  user_email: string | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: number | null;
+  description: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  status: string | null;
+  error_message: string | null;
+  created_at: string | null;
+}
+
+export interface AuditLogList {
+  items: AuditLogEntry[];
+  total: number;
+}
 // ============ API Клиент ============
 
 class ApiClient {
@@ -493,6 +554,58 @@ class ApiClient {
     const response = await axiosInstance.post('/tbank/sandbox/pay-in', null, {
       params: { amount: amount || 100000 },
     });
+    return response.data;
+  }
+
+  // Admin
+  async getAdminStats(): Promise<AdminStats> {
+    const response = await axiosInstance.get('/admin/stats');
+    return response.data;
+  }
+
+  async getAdminUsers(params?: {
+    limit?: number;
+    offset?: number;
+    search?: string;
+    is_active?: boolean;
+    is_verified?: boolean;
+  }): Promise<AdminUserList> {
+    const response = await axiosInstance.get('/admin/users', { params });
+    return response.data;
+  }
+
+  async blockUser(userId: number, reason?: string): Promise<{ message: string }> {
+    const response = await axiosInstance.post(`/admin/users/${userId}/block`, { reason });
+    return response.data;
+  }
+
+  async unblockUser(userId: number): Promise<{ message: string }> {
+    const response = await axiosInstance.post(`/admin/users/${userId}/unblock`);
+    return response.data;
+  }
+
+  async deleteUser(userId: number): Promise<{ message: string }> {
+    const response = await axiosInstance.delete(`/admin/users/${userId}`);
+    return response.data;
+  }
+
+  async adminVerifyEmail(userId: number): Promise<{ message: string }> {
+    const response = await axiosInstance.post(`/admin/users/${userId}/verify-email`);
+    return response.data;
+  }
+
+  async toggleSuperuser(userId: number): Promise<{ message: string }> {
+    const response = await axiosInstance.post(`/admin/users/${userId}/toggle-superuser`);
+    return response.data;
+  }
+
+  async getAuditLogs(params?: {
+    limit?: number;
+    offset?: number;
+    action?: string;
+    user_id?: number;
+  }): Promise<AuditLogList> {
+    const response = await axiosInstance.get('/admin/audit-logs', { params });
     return response.data;
   }
 }

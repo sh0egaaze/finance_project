@@ -1,11 +1,13 @@
 import {
   LayoutDashboard, Receipt, PieChart, Bell, TrendingUp,
-  AlertTriangle, Lightbulb, Settings, DollarSign
+  AlertTriangle, Lightbulb, Settings, DollarSign, Shield
 } from 'lucide-react';
+import { User } from '../api';
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  user: User | null;
 }
 
 const menuItems = [
@@ -20,7 +22,13 @@ const menuItems = [
   { id: 'settings', icon: Settings, label: 'Настройки' },
 ];
 
-export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export default function Sidebar({ activeTab, onTabChange, user }: SidebarProps) {
+  const isAdmin = user?.is_superuser ?? false;
+
+  const allItems = isAdmin
+    ? [...menuItems, { id: 'admin', icon: Shield, label: 'Админка' }]
+    : menuItems;
+
   return (
     <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen sticky top-0 shrink-0">
       {/* Логотип */}
@@ -34,23 +42,32 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           </p>
         </div>
       </div>
-      
+
       {/* Навигация */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {menuItems.map((item) => {
+        {allItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
+          const isAdminItem = item.id === 'admin';
           return (
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium ${
-                isActive
+                isAdminItem && !isActive
+                  ? 'text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20'
+                  : isActive
                   ? 'bg-blue-50 text-blue-600 shadow-sm dark:bg-blue-900/30 dark:text-blue-400'
                   : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-300'
               }`}
             >
-              <Icon className={`w-5 h-5 ${isActive ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`} />
+              <Icon className={`w-5 h-5 ${
+                isAdminItem && !isActive
+                  ? 'text-yellow-500 dark:text-yellow-400'
+                  : isActive
+                  ? 'text-blue-500 dark:text-blue-400'
+                  : 'text-gray-400 dark:text-gray-500'
+              }`} />
               {item.label}
             </button>
           );

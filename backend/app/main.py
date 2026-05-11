@@ -25,6 +25,7 @@ from app.routers import (
     currency_router,
     tbank_router,
 )
+from app.routers.admin import router as admin_router 
 
 from app.routers.auth import get_current_user
 
@@ -162,6 +163,7 @@ app.include_router(dashboard_router, prefix="/api/v1", tags=["Дашборд"])
 app.include_router(reminders_router, prefix="/api/v1", tags=["Напоминания"])
 app.include_router(currency_router, prefix="/api/v1", tags=["Валюты"])
 app.include_router(tbank_router, prefix="/api/v1", tags=["Т-Банк"])
+app.include_router(admin_router, prefix="/api/v1", tags=["Админ-панель"])
 
 
 @app.get(

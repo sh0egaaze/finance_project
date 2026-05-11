@@ -12,6 +12,7 @@ import SavingTips from './components/SavingTips';
 import Settings from './components/Settings';
 import AddTransactionModal from './components/AddTransactionModal';
 import AuthPage from './components/AuthPage';
+import AdminPanel from './components/AdminPanel';
 import { api, User, Category } from './api';
 
 export default function App() {
@@ -145,6 +146,8 @@ export default function App() {
         return <SuspiciousTransactions key={refreshKey} />;
       case 'tips':
         return <SavingTips key={refreshKey} />;
+      case 'admin':
+        return <AdminPanel key={refreshKey} />;
       case 'settings':
         return <Settings user={user} onLogout={handleLogout} onUserUpdate={setUser} />;
       default:
@@ -154,7 +157,7 @@ export default function App() {
 
       return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex overflow-hidden">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} user={user} />
       
       <div className="flex-1 flex flex-col min-w-0">
         <Header 
