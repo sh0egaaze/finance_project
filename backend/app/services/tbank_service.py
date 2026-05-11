@@ -159,15 +159,19 @@ class TBankService:
 
         # Получаем операции
         operations = await self.get_operations(days)
-        
+
         if not operations:
             return 0
-        
+
         new_count = 0
-        
-        # Получаем категории для маппинга
-        categories = {c.code: c for c in db_session.query(Category).all()}
-        
+
+        # Получаем категории только для этого пользователя
+        user_categories = db_session.query(Category).filter(Category.user_id == user_id).all()
+        categories = {c.code: c for c in user_categories}
+
+        # Fallback категория "other"
+        other_category = categories.get("other")
+
         for op in operations:
             external_id = op.get("id", "")
             
@@ -198,10 +202,10 @@ class TBankService:
             op_type = op.get("operationType", "")
             op_state = op.get("state", "")
             
-            # Для инвестиционных операций — категория "Другое" или "Переводы"
+            # Для инвестиционных операций — категория по типу
             if op_type in ("OPERATION_TYPE_BUY", "OPERATION_TYPE_SELL", 
-                           "OPERATION_TYPE_BROKER_FEE", "OPERATION_TYPE_INPUT",
-                           "OPERATION_TYPE_OUTPUT"):
+                            "OPERATION_TYPE_BROKER_FEE", "OPERATION_TYPE_INPUT",
+                            "OPERATION_TYPE_OUTPUT"):
                 if op_type == "OPERATION_TYPE_BUY":
                     description = f"Покупка: {op.get('name', '') or op.get('description', 'ценные бумаги')}"
                     category_code = "shopping"
@@ -224,7 +228,8 @@ class TBankService:
                 category_code = cat_result.category_code
                 confidence = Decimal(str(cat_result.confidence))
             
-            category = categories.get(category_code) or categories.get("other")
+            # Получаем категорию пользователя по коду
+            category = categories.get(category_code) or other_category
             
             # Парсим дату
             op_date = op.get("date", "")
@@ -281,9 +286,9 @@ class TBankService:
             
             db_session.add(transaction)
             new_count += 1
-        
+
         if new_count > 0:
             db_session.commit()
             logger.info(f"Синхронизировано {new_count} транзакций из Т-Банк для пользователя {user_id}")
-        
+
         return new_count
