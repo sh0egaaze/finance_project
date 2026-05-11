@@ -11,6 +11,22 @@ export default function CurrencyRates() {
   const [toCurrency, setToCurrency] = useState('USD');
   const [convertedAmount, setConvertedAmount] = useState<number | null>(null);
 
+  const CURRENCY_TO_COUNTRY: Record<string, string> = {
+    USD: 'us', EUR: 'eu', GBP: 'gb', CHF: 'ch', JPY: 'jp',
+    CNY: 'cn', HKD: 'hk', SGD: 'sg', KRW: 'kr', INR: 'in',
+    THB: 'th', VND: 'vn', IDR: 'id', MYR: 'my', PHP: 'ph',
+    KZT: 'kz', BYN: 'by', UAH: 'ua', UZS: 'uz', GEL: 'ge',
+    AMD: 'am', AZN: 'az', MDL: 'md', KGS: 'kg', TJS: 'tj',
+    TRY: 'tr', AED: 'ae', SAR: 'sa', ILS: 'il', QAR: 'qa',
+    KWD: 'kw', BHD: 'bh', OMR: 'om', EGP: 'eg',
+    CAD: 'ca', MXN: 'mx', BRL: 'br', ARS: 'ar', CLP: 'cl',
+    COP: 'co', PEN: 'pe',
+    PLN: 'pl', CZK: 'cz', HUF: 'hu', RON: 'ro', BGN: 'bg',
+    HRK: 'hr', RSD: 'rs', SEK: 'se', NOK: 'no', DKK: 'dk', ISK: 'is',
+    AUD: 'au', NZD: 'nz', ZAR: 'za', NGN: 'ng', MAD: 'ma',
+    RUB: 'ru',
+  };
+
   const loadRates = async () => {
     setIsLoading(true);
     setError(null);
@@ -99,15 +115,24 @@ export default function CurrencyRates() {
         {rates.map((rate) => (
           <div key={rate.currency} className={cardClass}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-2xl">{rate.flag}</span>
+              <img
+                src={`https://flagcdn.com/w40/${CURRENCY_TO_COUNTRY[rate.currency] || rate.currency.slice(0, 2).toLowerCase()}.png`}
+                alt={rate.currency}
+                className="w-8 h-6 rounded shadow-sm object-cover"
+                onError={(e) => {
+                  const el = e.target as HTMLImageElement;
+                  el.style.display = 'none';
+                  el.parentElement!.insertAdjacentHTML('beforeend', `<span class="text-lg">${rate.flag}</span>`);
+                }}
+              />
               <span className={`flex items-center gap-1 text-sm ${rate.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {rate.change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                 {rate.change >= 0 ? '+' : ''}{rate.change.toFixed(2)}%
               </span>
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-400">{rate.name}</div>
-            <div className="text-2xl font-bold text-gray-800 mt-1 dark:text-white">{rate.rate.toFixed(2)} ₽</div>
-            <div className="text-sm text-gray-400 dark:text-gray-500">1 {rate.currency}</div>
+            <div className="text-2xl font-bold text-gray-800 dark:text-white mt-1">{rate.rate.toFixed(2)} ₽</div>
+            <div className="text-xs font-medium text-gray-400 dark:text-gray-500 mt-0.5">1 {rate.currency}</div>
           </div>
         ))}
       </div>
