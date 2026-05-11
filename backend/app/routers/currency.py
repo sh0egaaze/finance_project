@@ -13,7 +13,7 @@ from sqlalchemy import desc
 from pydantic import BaseModel, Field
 
 from app.database import get_db
-from app.models import CurrencyRate
+from app.models import CurrencyRate, AuditLog
 from app.config import get_settings
 
 router = APIRouter(prefix="/currency", tags=["Валюты"])
@@ -241,6 +241,7 @@ def save_rates_to_db(db: Session, api_data: dict) -> None:
     now = datetime.now(timezone.utc)
     rates = api_data.get("rates") or api_data.get("conversion_rates", {})
     
+    updated_count = 0
     for currency in MAIN_CURRENCIES:
         if currency in rates:
             rate_from_api = rates[currency]
@@ -257,7 +258,17 @@ def save_rates_to_db(db: Session, api_data: dict) -> None:
                 source="exchangerate-api.com"
             )
             db.add(new_rate)
+            updated_count += 1
     
+    # Логируем обновление курсов
+    audit_log = AuditLog(
+        user_id=None,  # Системное действие
+        action="currency_rates_updated",
+        entity_type="currency_rate",
+        description=f"Обновлено {updated_count} курсов валют",
+        status="success"
+    )
+    db.add(audit_log)
     db.commit()
     
     # Удаляем старые записи (оставляем только за последние 7 дней)

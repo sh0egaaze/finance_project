@@ -34,6 +34,17 @@ async def process_reminders():
         ).all()
 
         logger.info(f"Проверка напоминаний: найдено {len(due_reminders)} шт.")
+
+        # Логируем проверку напоминаний (системное событие)
+        check_log = AuditLog(
+            user_id=None,
+            action="reminders_check",
+            entity_type="reminder",
+            description=f"Проверка напоминаний: найдено {len(due_reminders)} к отправке",
+            status="success"
+        )
+        db.add(check_log)
+        db.commit()
         
         for rem in due_reminders:
             try:

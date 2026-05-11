@@ -66,8 +66,6 @@ class AdminStatsResponse(BaseModel):
     transactions_today: int = Field(..., description="Транзакций сегодня")
     transactions_this_week: int = Field(..., description="Транзакций за неделю")
     transactions_this_month: int = Field(..., description="Транзакций за месяц")
-    total_income: float = Field(..., description="Общий доход (все пользователи)")
-    total_expense: float = Field(..., description="Общий расход (все пользователи)")
     tbank_connected_count: int = Field(..., description="Подключили Т-Банк")
 
 
@@ -80,8 +78,6 @@ class AuditLogResponse(BaseModel):
     entity_type: Optional[str]
     entity_id: Optional[int]
     description: Optional[str]
-    ip_address: Optional[str]
-    user_agent: Optional[str]
     status: Optional[str]
     error_message: Optional[str]
     created_at: Optional[str]
@@ -146,9 +142,6 @@ async def get_system_stats(
     transactions_this_week = db.query(func.count(Transaction.id)).filter(Transaction.created_at >= week_ago).scalar() or 0
     transactions_this_month = db.query(func.count(Transaction.id)).filter(Transaction.created_at >= month_ago).scalar() or 0
 
-    total_income = float(db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(Transaction.amount > 0).scalar() or 0)
-    total_expense = float(abs(db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(Transaction.amount < 0).scalar() or 0))
-
     tbank_connected = db.query(func.count(User.id)).filter(User.tbank_token_encrypted.isnot(None)).scalar() or 0
 
     return AdminStatsResponse(
@@ -166,8 +159,6 @@ async def get_system_stats(
         transactions_today=transactions_today,
         transactions_this_week=transactions_this_week,
         transactions_this_month=transactions_this_month,
-        total_income=total_income,
-        total_expense=total_expense,
         tbank_connected_count=tbank_connected,
     )
 
@@ -472,8 +463,6 @@ async def get_audit_logs(
             entity_type=log.entity_type,
             entity_id=log.entity_id,
             description=log.description,
-            ip_address=log.ip_address,
-            user_agent=log.user_agent,
             status=log.status,
             error_message=log.error_message,
             created_at=log.created_at.isoformat() if log.created_at else None,

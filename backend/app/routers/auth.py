@@ -16,7 +16,7 @@ from slowapi.util import get_remote_address
 from loguru import logger
 
 from app.database import get_db
-from app.models import User, Category
+from app.models import User, Category, AuditLog
 from app.services.email_service import email_service
 
 router = APIRouter(prefix="/auth", tags=["Авторизация"])
@@ -366,6 +366,26 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
         db.commit()
         db.refresh(user)
         create_default_categories(user.id, db)
+        try:
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            create_default_categories(user.id, db)
+            
+            # Логируем регистрацию
+            audit_log = AuditLog(
+                user_id=user.id,
+                action="user_registered",
+                entity_type="user",
+                entity_id=user.id,
+                description=f"Зарегистрирован новый пользователь: {user.email}",
+                status="success"
+            )
+            db.add(audit_log)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="Ошибка при создании пользователя")
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="Ошибка при создании пользователя")

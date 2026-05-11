@@ -313,8 +313,6 @@ export interface AdminStats {
   transactions_today: number;
   transactions_this_week: number;
   transactions_this_month: number;
-  total_income: number;
-  total_expense: number;
   tbank_connected_count: number;
 }
 
@@ -326,8 +324,6 @@ export interface AuditLogEntry {
   entity_type: string | null;
   entity_id: number | null;
   description: string | null;
-  ip_address: string | null;
-  user_agent: string | null;
   status: string | null;
   error_message: string | null;
   created_at: string | null;

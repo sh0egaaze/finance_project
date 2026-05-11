@@ -77,9 +77,6 @@ function StatsTab() {
     purple: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400',
   };
 
-  const formatCurrency = (v: number) =>
-    new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(v);
-
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -111,20 +108,6 @@ function StatsTab() {
             <StatRow label="Транзакций за месяц" value={stats.transactions_this_month} />
             <StatRow label="Активны сегодня" value={stats.active_today} />
             <StatRow label="Активны за неделю" value={stats.active_this_week} />
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Финансы (все пользователи)</h3>
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <p className="text-sm text-gray-400 dark:text-gray-500">Общий доход</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(stats.total_income)}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-400 dark:text-gray-500">Общий расход</p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatCurrency(stats.total_expense)}</p>
           </div>
         </div>
       </div>
@@ -314,11 +297,18 @@ function LogsTab() {
   const currentPage = Math.floor(offset / limit) + 1;
 
   const actionLabels: Record<string, string> = {
-    block_user: '🔒 Блокировка',
-    unblock_user: '🔓 Разблокировка',
-    delete_user: '🗑️ Удаление',
-    admin_verify_email: '✅ Верификация email',
-    toggle_superuser: '👑 Смена роли',
+    // Системные события
+    user_registered: '👤 Регистрация пользователя',
+    currency_rates_updated: '💱 Обновление курсов валют',
+    reminders_check: '🔔 Проверка напоминаний',
+    reminder_sent: '📧 Отправка напоминания',
+    
+    // Действия админов
+    block_user: '🔒 Блокировка пользователя',
+    unblock_user: '🔓 Разблокировка пользователя',
+    delete_user: '🗑️ Удаление пользователя',
+    admin_verify_email: '✅ Подтверждение email (админ)',
+    toggle_superuser: '👑 Изменение прав админа',
   };
 
   if (isLoading) return <Loader />;

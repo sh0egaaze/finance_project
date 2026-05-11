@@ -26,7 +26,7 @@ export default function Sidebar({ activeTab, onTabChange, user }: SidebarProps) 
   const isAdmin = user?.is_superuser ?? false;
 
   const allItems = isAdmin
-    ? [...menuItems, { id: 'admin', icon: Shield, label: 'Админка' }]
+    ? [...menuItems, { id: 'admin', icon: Shield, label: 'Админ-панель' }]
     : menuItems;
 
   return (
