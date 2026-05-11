@@ -334,7 +334,13 @@ async def get_transactions(
     )
     
     if is_suspicious is not None:
-        query = query.filter(Transaction.is_suspicious == is_suspicious)
+        if is_suspicious:
+            query = query.filter(
+                Transaction.is_suspicious == True,
+                Transaction.suspicious_dismissed == False
+            )
+        else:
+            query = query.filter(Transaction.is_suspicious == False)
     
     total = query.count()
     
@@ -759,7 +765,35 @@ async def delete_transaction(
             status_code=500,
             detail="Ошибка при удалении транзакции"
         )
+@router.post(
+    "/{tx_id}/dismiss-suspicious",
+    response_model=UpdateResponse,
+    summary="Подтвердить что транзакция легитимна",
+    description="""
+Помечает подозрительную транзакцию как проверенную пользователем.
 
+После подтверждения транзакция больше не будет появляться в списке подозрительных,
+даже если формально подходит под критерии.
+
+**Требуется авторизация.**
+    """,
+    responses={
+        200: {"description": "Транзакция подтверждена"},
+        404: {"description": "Транзакция не найдена"},
+    }
+)
+async def dismiss_suspicious(
+    tx_id: int = Path(..., description="ID транзакции"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """Подтвердить что транзакция легитимна (убрать из подозрительных навсегда)."""
+    tx = get_own_transaction(tx_id, db, user)
+    tx.suspicious_dismissed = True
+    tx.is_suspicious = False
+    tx.suspicious_reason = None
+    db.commit()
+    return {"status": "dismissed"}
 
 @router.post(
     "/smart-input",

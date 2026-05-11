@@ -438,6 +438,11 @@ class ApiClient {
     await axiosInstance.delete(`/transactions/${id}`);
   }
 
+  async dismissSuspicious(transactionId: number): Promise<{ status: string }> {
+    const response = await axiosInstance.post(`/transactions/${transactionId}/dismiss-suspicious`);
+    return response.data;
+  }
+
   async smartInput(text: string): Promise<SmartInputResult> {
     const response = await axiosInstance.post('/transactions/smart-input', { text });
     return response.data;

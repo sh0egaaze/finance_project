@@ -133,6 +133,7 @@ class Transaction(Base):
     merchant_category_code = Column(String(10))
     is_suspicious = Column(Boolean, default=False)
     suspicious_reason = Column(String(255))
+    suspicious_dismissed = Column(Boolean, default=False)
     transaction_date = Column(TIMESTAMP(timezone=True), nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
