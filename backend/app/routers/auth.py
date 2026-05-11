@@ -2,8 +2,10 @@
 from app.config import get_settings
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -11,9 +13,11 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from loguru import logger
 
 from app.database import get_db
 from app.models import User, Category
+from app.services.email_service import email_service
 
 router = APIRouter(prefix="/auth", tags=["Авторизация"])
 
@@ -24,6 +28,9 @@ _settings = get_settings()
 SECRET_KEY = _settings.SECRET_KEY
 ALGORITHM = _settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = _settings.ACCESS_TOKEN_EXPIRE_MINUTES
+
+# Время жизни токена верификации email (24 часа)
+EMAIL_VERIFICATION_EXPIRE_HOURS = 24
 
 # Account lockout: трекинг неудачных попыток входа
 LOGIN_ATTEMPTS: dict[str, int] = {}
@@ -88,6 +95,7 @@ class UserResponse(BaseModel):
     email: str = Field(..., description="Email пользователя", examples=["user@example.com"])
     full_name: Optional[str] = Field(None, description="Полное имя", examples=["Иван Иванов"])
     is_active: bool = Field(..., description="Активен ли аккаунт", examples=[True])
+    email_verified: bool = Field(..., description="Подтверждён ли email", examples=[False])
     email_notifications: bool = Field(..., description="Включены ли email-уведомления", examples=[True])
     tbank_connected: bool = Field(False, description="Подключён ли Т-Банк", examples=[False])
 
@@ -123,16 +131,18 @@ class Token(BaseModel):
 
 class LoginRequest(BaseModel):
     """Схема для входа в систему"""
-    email: EmailStr = Field(
-        ...,
-        description="Email пользователя",
-        examples=["user@example.com"]
-    )
-    password: str = Field(
-        ...,
-        description="Пароль пользователя",
-        examples=["SecurePass123!"]
-    )
+    email: EmailStr = Field(..., description="Email пользователя", examples=["user@example.com"])
+    password: str = Field(..., description="Пароль пользователя", examples=["SecurePass123!"])
+
+
+class ResendVerificationRequest(BaseModel):
+    """Схема для повторной отправки верификации"""
+    email: EmailStr = Field(..., description="Email для повторной отправки", examples=["user@example.com"])
+
+
+class MessageResponse(BaseModel):
+    """Схема ответа с сообщением"""
+    message: str = Field(..., description="Сообщение", examples=["Операция выполнена"])
 
 
 DEFAULT_CATEGORIES = [
@@ -187,9 +197,12 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+def generate_verification_token() -> str:
+    """Генерация безопасного токена верификации email"""
+    return secrets.token_urlsafe(32)
+
+
 def check_login_attempts(email: str) -> None:
-    """Проверка лимита неудачных попыток входа.
-    Выбрасывает HTTPException 429 если аккаунт временно заблокирован."""
     lockout_until = LOGIN_LOCKOUT_UNTIL.get(email)
     if lockout_until and datetime.now(timezone.utc) < lockout_until:
         remaining = lockout_until - datetime.now(timezone.utc)
@@ -203,8 +216,6 @@ def check_login_attempts(email: str) -> None:
 
 
 def record_failed_login(email: str) -> None:
-    """Фиксация неудачной попытки входа.
-    После MAX_LOGIN_ATTEMPTS неудачных попыток — блокировка на LOCKOUT_DURATION_MINUTES."""
     attempts = LOGIN_ATTEMPTS.get(email, 0) + 1
     LOGIN_ATTEMPTS[email] = attempts
     if attempts >= MAX_LOGIN_ATTEMPTS:
@@ -212,7 +223,6 @@ def record_failed_login(email: str) -> None:
 
 
 def reset_login_attempts(email: str) -> None:
-    """Сброс счётчика неудачных попыток после успешного входа."""
     LOGIN_ATTEMPTS.pop(email, None)
     LOGIN_LOCKOUT_UNTIL.pop(email, None)
 
@@ -244,6 +254,17 @@ async def get_current_user(
     return user
 
 
+def require_verified_email(current_user: User = Depends(get_current_user)) -> User:
+    """Зависимость: требуется подтверждённый email.
+    Используется в эндпоинтах, где нужна верификация (напоминания и т.д.)."""
+    if not current_user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Для этого действия необходимо подтвердить email. Проверьте почту или запросите повторную отправку через /auth/resend-verification"
+        )
+    return current_user
+
+
 # ======== Эндпоинты ========
 @router.post(
     "/register",
@@ -253,6 +274,11 @@ async def get_current_user(
     description="""
 Создаёт нового пользователя в системе.
 
+**После регистрации:**
+- На указанный email отправляется письмо для подтверждения
+- До подтверждения email некоторые функции недоступны (напоминания)
+- Вход в систему возможен сразу после регистрации
+
 **Требования к паролю:**
 - Минимум 12 символов
 - Хотя бы одна цифра
@@ -260,13 +286,11 @@ async def get_current_user(
 - Хотя бы один спецсимвол (!@#$%^&*()-_+=)
 
 **Лимит:** 5 запросов в час на IP-адрес.
-
-При успешной регистрации автоматически создаются стандартные категории расходов/доходов.
     """,
     response_description="Данные созданного пользователя",
     responses={
         201: {
-            "description": "Пользователь успешно создан",
+            "description": "Пользователь успешно создан, письмо подтверждения отправлено",
             "content": {
                 "application/json": {
                     "example": {
@@ -274,6 +298,7 @@ async def get_current_user(
                         "email": "user@example.com",
                         "full_name": "Иван Иванов",
                         "is_active": True,
+                        "email_verified": False,
                         "email_notifications": True,
                         "tbank_connected": False
                     }
@@ -281,7 +306,7 @@ async def get_current_user(
             }
         },
         400: {
-            "description": "Ошибка валидации или пользователь уже существует",
+            "description": "Пользователь уже существует или ошибка валидации",
             "content": {
                 "application/json": {
                     "examples": {
@@ -312,9 +337,8 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
     """
     Регистрация нового пользователя.
     
-    Создаёт учётную запись с указанным email и паролем.
-    После регистрации пользователю автоматически создаются
-    стандартные категории для учёта расходов и доходов.
+    Создаёт учётную запись и отправляет письмо для подтверждения email.
+    Стандартные категории создаются автоматически.
     """
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
@@ -323,11 +347,16 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
             detail="Пользователь с таким email уже зарегистрирован"
         )
 
+    verification_token = generate_verification_token()
+
     user = User(
         email=data.email,
         hashed_password=get_password_hash(data.password),
         full_name=data.full_name,
         is_active=True,
+        email_verified=False,
+        email_verification_token=verification_token,
+        email_verification_sent_at=datetime.now(timezone.utc),
         email_notifications=True,
     )
 
@@ -340,14 +369,199 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
         db.rollback()
         raise HTTPException(status_code=400, detail="Ошибка при создании пользователя")
 
+    # Отправляем письмо подтверждения (асинхронно, не блокируем регистрацию при ошибке)
+    try:
+        base_url = str(request.base_url).rstrip("/")
+        await email_service.send_verification_email(user.email, verification_token, base_url)
+    except Exception as e:
+        logger.error(f"Не удалось отправить email верификации: {e}")
+
     return UserResponse(
         id=user.id,
         email=user.email,
         full_name=user.full_name,
         is_active=user.is_active,
+        email_verified=user.email_verified,
         email_notifications=user.email_notifications,
         tbank_connected=bool(user.tbank_token_encrypted),
     )
+
+
+@router.get(
+    "/verify-email/{token}",
+    response_class=HTMLResponse,
+    summary="Подтверждение email по ссылке",
+    description="""
+Подтверждает email пользователя по токену из письма.
+
+**Токен действителен 24 часа.**
+
+Возвращает HTML-страницу с результатом подтверждения.
+    """,
+    responses={
+        200: {"description": "Email успешно подтверждён (HTML-страница)"},
+        400: {"description": "Токен недействителен или истёк (HTML-страница)"},
+    }
+)
+async def verify_email(token: str, db: Session = Depends(get_db)):
+    """Подтверждение email по токену из письма."""
+    user = db.query(User).filter(User.email_verification_token == token).first()
+
+    if not user:
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html><head><meta charset="utf-8"><title>Ошибка</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f3f4f6; }
+                .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; max-width: 420px; }
+                .icon { font-size: 48px; margin-bottom: 16px; }
+                h1 { color: #dc2626; margin: 0 0 12px; font-size: 22px; }
+                p { color: #6b7280; margin: 8px 0; }
+            </style></head>
+            <body><div class="card">
+                <div class="icon">❌</div>
+                <h1>Ссылка недействительна</h1>
+                <p>Токен подтверждения не найден или уже был использован.</p>
+                <p>Запросите новое письмо в приложении.</p>
+            </div></body></html>
+            """,
+            status_code=400
+        )
+
+    # Проверяем срок действия
+    if user.email_verification_sent_at:
+        sent_at = user.email_verification_sent_at
+        if sent_at.tzinfo is None:
+            sent_at = sent_at.replace(tzinfo=timezone.utc)
+        token_age = datetime.now(timezone.utc) - sent_at
+        if token_age > timedelta(hours=EMAIL_VERIFICATION_EXPIRE_HOURS):
+            return HTMLResponse(
+                content="""
+                <!DOCTYPE html>
+                <html><head><meta charset="utf-8"><title>Ссылка устарела</title>
+                <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f3f4f6; }
+                    .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; max-width: 420px; }
+                    .icon { font-size: 48px; margin-bottom: 16px; }
+                    h1 { color: #f59e0b; margin: 0 0 12px; font-size: 22px; }
+                    p { color: #6b7280; margin: 8px 0; }
+                </style></head>
+                <body><div class="card">
+                    <div class="icon">⏰</div>
+                    <h1>Ссылка устарела</h1>
+                    <p>Срок действия ссылки истёк (24 часа).</p>
+                    <p>Запросите новое письмо в настройках приложения.</p>
+                </div></body></html>
+                """,
+                status_code=400
+            )
+
+    # Подтверждаем email
+    user.email_verified = True
+    user.email_verification_token = None
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    logger.info(f"Email подтверждён: {user.email}")
+
+    return HTMLResponse(
+        content="""
+        <!DOCTYPE html>
+        <html><head><meta charset="utf-8"><title>Email подтверждён!</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #3b82f6, #6366f1); }
+            .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); text-align: center; max-width: 420px; }
+            .icon { font-size: 48px; margin-bottom: 16px; }
+            h1 { color: #16a34a; margin: 0 0 12px; font-size: 22px; }
+            p { color: #6b7280; margin: 8px 0 20px; }
+            .button { display: inline-block; background: #3b82f6; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; }
+            .button:hover { background: #2563eb; }
+        </style></head>
+        <body><div class="card">
+            <div class="icon">✅</div>
+            <h1>Email подтверждён!</h1>
+            <p>Теперь вам доступны все функции FinanceApp, включая напоминания.</p>
+            <a href="/" class="button">Перейти в приложение</a>
+        </div></body></html>
+        """
+    )
+
+
+@router.post(
+    "/resend-verification",
+    response_model=MessageResponse,
+    summary="Повторная отправка письма подтверждения",
+    description="""
+Повторно отправляет письмо для подтверждения email.
+
+**Лимит:** 3 запроса в час.
+
+Используйте, если:
+- Письмо не пришло
+- Ссылка устарела (срок действия 24 часа)
+    """,
+    response_description="Подтверждение отправки",
+    responses={
+        200: {
+            "description": "Письмо отправлено",
+            "content": {
+                "application/json": {
+                    "example": {"message": "Письмо с подтверждением отправлено на ваш email"}
+                }
+            }
+        },
+        400: {
+            "description": "Email уже подтверждён",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Email уже подтверждён"}
+                }
+            }
+        },
+        404: {
+            "description": "Пользователь не найден",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Пользователь с таким email не найден"}
+                }
+            }
+        },
+        429: {
+            "description": "Слишком много запросов",
+        }
+    }
+)
+@limiter.limit("3/hour")
+async def resend_verification(
+    request: Request,
+    data: ResendVerificationRequest,
+    db: Session = Depends(get_db)
+):
+    """Повторная отправка письма подтверждения email."""
+    user = db.query(User).filter(User.email == data.email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь с таким email не найден")
+
+    if user.email_verified:
+        raise HTTPException(status_code=400, detail="Email уже подтверждён")
+
+    # Генерируем новый токен
+    verification_token = generate_verification_token()
+    user.email_verification_token = verification_token
+    user.email_verification_sent_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # Отправляем письмо
+    try:
+        base_url = str(request.base_url).rstrip("/")
+        await email_service.send_verification_email(user.email, verification_token, base_url)
+    except Exception as e:
+        logger.error(f"Не удалось отправить email верификации: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка отправки письма. Попробуйте позже.")
+
+    return {"message": "Письмо с подтверждением отправлено на ваш email"}
 
 
 @router.post(
@@ -357,6 +571,8 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
     description="""
 Аутентификация пользователя по email и паролю.
 
+**Важно:** Вход возможен без подтверждения email, но некоторые функции будут недоступны.
+
 **Формат запроса:** `application/x-www-form-urlencoded`
 - `username` — email пользователя
 - `password` — пароль
@@ -364,9 +580,6 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
 **Защита от брутфорса:**
 - После 5 неудачных попыток аккаунт блокируется на 15 минут
 - Лимит: 10 запросов в минуту на IP
-
-**Использование токена:**
-Authorization: Bearer <access_token>
     """,
     response_description="JWT токен для авторизации",
     responses={
@@ -374,37 +587,13 @@ Authorization: Bearer <access_token>
             "description": "Успешная авторизация",
             "content": {
                 "application/json": {
-                    "example": {
-                        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "token_type": "bearer"
-                    }
+                    "example": {"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...", "token_type": "bearer"}
                 }
             }
         },
-        401: {
-            "description": "Неверные учётные данные",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Неверный email или пароль"}
-                }
-            }
-        },
-        403: {
-            "description": "Аккаунт деактивирован",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Аккаунт деактивирован"}
-                }
-            }
-        },
-        429: {
-            "description": "Слишком много попыток входа",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Аккаунт временно заблокирован. Попробуйте через 15 минут."}
-                }
-            }
-        }
+        401: {"description": "Неверные учётные данные"},
+        403: {"description": "Аккаунт деактивирован"},
+        429: {"description": "Слишком много попыток входа"},
     }
 )
 @limiter.limit("10/minute")
@@ -413,12 +602,7 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    """
-    Аутентификация пользователя и получение JWT-токена.
-    
-    Принимает email (в поле username) и пароль.
-    Возвращает access_token для использования в защищённых эндпоинтах.
-    """
+    """Аутентификация пользователя и получение JWT-токена."""
     check_login_attempts(form_data.username)
 
     user = db.query(User).filter(User.email == form_data.username).first()
@@ -449,12 +633,7 @@ async def login(
     "/me",
     response_model=UserResponse,
     summary="Получение текущего пользователя",
-    description="""
-Возвращает информацию о текущем авторизованном пользователе.
-
-**Требуется авторизация** — передайте JWT токен в заголовке:
-Authorization: Bearer <token>
-    """,
+    description="Возвращает информацию о текущем авторизованном пользователе, включая статус верификации email.",
     response_description="Данные текущего пользователя",
     responses={
         200: {
@@ -466,42 +645,25 @@ Authorization: Bearer <token>
                         "email": "user@example.com",
                         "full_name": "Иван Иванов",
                         "is_active": True,
+                        "email_verified": True,
                         "email_notifications": True,
                         "tbank_connected": False
                     }
                 }
             }
         },
-        401: {
-            "description": "Не авторизован или токен недействителен",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Недействительный токен"}
-                }
-            }
-        },
-        403: {
-            "description": "Аккаунт деактивирован",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Аккаунт деактивирован"}
-                }
-            }
-        }
+        401: {"description": "Не авторизован"},
+        403: {"description": "Аккаунт деактивирован"},
     }
 )
 async def get_me(current_user: User = Depends(get_current_user)):
-    """
-    Получение информации о текущем пользователе.
-    
-    Возвращает профиль авторизованного пользователя,
-    включая статус подключения к Т-Банку.
-    """
+    """Получение информации о текущем пользователе."""
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
         full_name=current_user.full_name,
         is_active=current_user.is_active,
+        email_verified=current_user.email_verified,
         email_notifications=current_user.email_notifications,
         tbank_connected=bool(current_user.tbank_token_encrypted),
     )
@@ -509,31 +671,13 @@ async def get_me(current_user: User = Depends(get_current_user)):
 
 class ProfileUpdate(BaseModel):
     """Схема для обновления профиля пользователя"""
-    full_name: Optional[str] = Field(
-        None,
-        max_length=100,
-        description="Полное имя пользователя",
-        examples=["Иван Иванов"]
-    )
-    email_notifications: Optional[bool] = Field(
-        None,
-        description="Включить/выключить email-уведомления",
-        examples=[True]
-    )
-    notification_email: Optional[str] = Field(
-        None,
-        description="Email для уведомлений (если отличается от основного)",
-        examples=["notifications@example.com"]
-    )
+    full_name: Optional[str] = Field(None, max_length=100, description="Полное имя", examples=["Иван Иванов"])
+    email_notifications: Optional[bool] = Field(None, description="Email-уведомления", examples=[True])
+    notification_email: Optional[str] = Field(None, description="Email для уведомлений", examples=["notify@example.com"])
 
     model_config = {
         "json_schema_extra": {
-            "examples": [
-                {
-                    "full_name": "Иван Петров",
-                    "email_notifications": True
-                }
-            ]
+            "examples": [{"full_name": "Иван Петров", "email_notifications": True}]
         }
     }
 
@@ -542,51 +686,10 @@ class ProfileUpdate(BaseModel):
     "/me",
     response_model=UserResponse,
     summary="Обновление профиля",
-    description="""
-Обновляет данные профиля текущего пользователя.
-
-**Требуется авторизация.**
-
-Можно обновить:
-- `full_name` — полное имя
-- `email_notifications` — настройка email-уведомлений
-- `notification_email` — альтернативный email для уведомлений
-
-Передавайте только те поля, которые нужно изменить.
-    """,
-    response_description="Обновлённые данные пользователя",
+    description="Обновляет данные профиля текущего пользователя. Передавайте только те поля, которые нужно изменить.",
     responses={
-        200: {
-            "description": "Профиль успешно обновлён",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "id": 1,
-                        "email": "user@example.com",
-                        "full_name": "Иван Петров",
-                        "is_active": True,
-                        "email_notifications": True,
-                        "tbank_connected": False
-                    }
-                }
-            }
-        },
-        401: {
-            "description": "Не авторизован",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Недействительный токен"}
-                }
-            }
-        },
-        422: {
-            "description": "Ошибка валидации данных",
-            "content": {
-                "application/json": {
-                    "example": {"detail": [{"loc": ["body", "full_name"], "msg": "String should have at most 100 characters"}]}
-                }
-            }
-        }
+        200: {"description": "Профиль обновлён"},
+        401: {"description": "Не авторизован"},
     }
 )
 async def update_profile(
@@ -594,12 +697,7 @@ async def update_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Обновление профиля пользователя.
-    
-    Позволяет изменить имя и настройки уведомлений.
-    Обновляются только переданные поля.
-    """
+    """Обновление профиля пользователя."""
     update_data = data.model_dump(exclude_unset=True)
     
     for field, value in update_data.items():
@@ -613,6 +711,7 @@ async def update_profile(
         email=current_user.email,
         full_name=current_user.full_name,
         is_active=current_user.is_active,
+        email_verified=current_user.email_verified,
         email_notifications=current_user.email_notifications,
         tbank_connected=bool(current_user.tbank_token_encrypted),
     )
@@ -620,17 +719,8 @@ async def update_profile(
 
 class PasswordChange(BaseModel):
     """Схема для смены пароля"""
-    current_password: str = Field(
-        ...,
-        description="Текущий пароль пользователя",
-        examples=["OldSecurePass123!"]
-    )
-    new_password: str = Field(
-        ...,
-        min_length=12,
-        description="Новый пароль (мин. 12 символов, цифра, заглавная буква, спецсимвол)",
-        examples=["NewSecurePass456!"]
-    )
+    current_password: str = Field(..., description="Текущий пароль", examples=["OldSecurePass123!"])
+    new_password: str = Field(..., min_length=12, description="Новый пароль", examples=["NewSecurePass456!"])
 
     @field_validator("new_password")
     @classmethod
@@ -647,18 +737,14 @@ class PasswordChange(BaseModel):
 
     model_config = {
         "json_schema_extra": {
-            "examples": [
-                {
-                    "current_password": "OldSecurePass123!",
-                    "new_password": "NewSecurePass456!"
-                }
-            ]
+            "examples": [{"current_password": "OldSecurePass123!", "new_password": "NewSecurePass456!"}]
         }
     }
 
 
 @router.post(
     "/change-password",
+    response_model=MessageResponse,
     summary="Смена пароля",
     description="""
 Изменяет пароль текущего пользователя.
@@ -666,48 +752,12 @@ class PasswordChange(BaseModel):
 **Требуется авторизация.**
 
 **Требования к новому паролю:**
-- Минимум 12 символов
-- Хотя бы одна цифра
-- Хотя бы одна заглавная буква
-- Хотя бы один спецсимвол (!@#$%^&*()-_+=)
-
-Для смены пароля необходимо указать текущий пароль.
+- Минимум 12 символов, цифра, заглавная буква, спецсимвол
     """,
-    response_description="Подтверждение смены пароля",
     responses={
-        200: {
-            "description": "Пароль успешно изменён",
-            "content": {
-                "application/json": {
-                    "example": {"message": "Пароль успешно изменён"}
-                }
-            }
-        },
-        400: {
-            "description": "Неверный текущий пароль или слабый новый пароль",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "wrong_password": {
-                            "summary": "Неверный текущий пароль",
-                            "value": {"detail": "Неверный текущий пароль"}
-                        },
-                        "weak_password": {
-                            "summary": "Слабый новый пароль",
-                            "value": {"detail": [{"loc": ["body", "new_password"], "msg": "Пароль должен содержать не менее 12 символов"}]}
-                        }
-                    }
-                }
-            }
-        },
-        401: {
-            "description": "Не авторизован",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Недействительный токен"}
-                }
-            }
-        }
+        200: {"description": "Пароль изменён", "content": {"application/json": {"example": {"message": "Пароль успешно изменён"}}}},
+        400: {"description": "Неверный текущий пароль"},
+        401: {"description": "Не авторизован"},
     }
 )
 async def change_password(
@@ -715,12 +765,7 @@ async def change_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Смена пароля пользователя.
-    
-    Проверяет текущий пароль и устанавливает новый.
-    Новый пароль должен соответствовать требованиям безопасности.
-    """
+    """Смена пароля пользователя."""
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

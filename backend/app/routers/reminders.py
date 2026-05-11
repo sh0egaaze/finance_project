@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.models import Reminder, User, ReminderFrequency
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, require_verified_email
 
 router = APIRouter(prefix="/reminders", tags=["Напоминания"])
 
@@ -359,6 +359,9 @@ async def get_archived_reminders(
                 }
             }
         },
+        403: {
+            "description": "Email не подтверждён"
+        },
         422: {
             "description": "Ошибка валидации данных",
             "content": {
@@ -376,7 +379,7 @@ async def get_archived_reminders(
 async def create_reminder(
     data: ReminderCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_verified_email)
 ):
     """
     Создать напоминание.

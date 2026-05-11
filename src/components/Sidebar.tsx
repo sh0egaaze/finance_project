@@ -24,17 +24,17 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   return (
     <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen sticky top-0 shrink-0">
       {/* Логотип */}
-      <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="px-5 py-[13px] border-b border-gray-200 dark:border-gray-700 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-500 dark:from-blue-400 dark:to-indigo-400">
+          <h1 className="text-lg font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-500 dark:from-blue-400 dark:to-indigo-400 leading-tight">
             FinanceApp
           </h1>
-          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 tracking-wide uppercase">
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0 tracking-wide uppercase leading-tight">
             Управление финансами
           </p>
         </div>
       </div>
-
+      
       {/* Навигация */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {menuItems.map((item) => {

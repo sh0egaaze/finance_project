@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, Bell, Trash2, Check, Clock, Calendar, Edit2, ChevronDown, Archive } from 'lucide-react';
-import { api, Reminder, ReminderCreate } from '../api';
+import { Plus, Bell, Trash2, Check, Clock, Calendar, Edit2, ChevronDown, Archive, Mail, AlertTriangle } from 'lucide-react';
+import { api, Reminder, ReminderCreate, User as UserType } from '../api';
+
+interface RemindersProps {
+  user: UserType;
+}
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(value);
@@ -23,7 +27,7 @@ const getDefaultDate = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
 
-export default function Reminders() {
+export default function Reminders({ user }: RemindersProps) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -39,6 +43,8 @@ export default function Reminders() {
   const [archivedReminders, setArchivedReminders] = useState<Reminder[]>([]);
   const [showArchive, setShowArchive] = useState(false);
   const [archiveLoaded, setArchiveLoaded] = useState(false);
+
+  const isEmailVerified = user.email_verified;
 
   const cardClass = "bg-white rounded-xl shadow-sm p-6 dark:bg-gray-800";
   const titleClass = "text-gray-800 dark:text-white";
@@ -83,6 +89,7 @@ export default function Reminders() {
   };
 
   const openCreateForm = () => {
+    if (!isEmailVerified) return;
     resetForm();
     setShowForm(true);
   };
@@ -140,6 +147,15 @@ export default function Reminders() {
     }
   };
 
+  const handleResendVerification = async () => {
+    try {
+      await api.resendVerification(user.email);
+      alert('Письмо с подтверждением отправлено на ' + user.email);
+    } catch {
+      alert('Ошибка отправки. Попробуйте позже.');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -152,14 +168,50 @@ export default function Reminders() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className={`text-2xl font-bold ${titleClass}`}>Напоминания</h2>
-        <button onClick={openCreateForm} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-          <Plus className="w-4 h-4" />
-          Добавить
-        </button>
+        {isEmailVerified ? (
+          <button onClick={openCreateForm} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <Plus className="w-4 h-4" />
+            Добавить
+          </button>
+        ) : (
+          <button disabled className="flex items-center gap-2 px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed dark:bg-gray-700 dark:text-gray-500">
+            <Plus className="w-4 h-4" />
+            Добавить
+          </button>
+        )}
       </div>
 
-      {/* Form Modal */}
-      {showForm && (
+      {/* Баннер: email не подтверждён */}
+      {!isEmailVerified && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 dark:bg-amber-900/20 dark:border-amber-800">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0 dark:bg-amber-800">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-amber-800 dark:text-amber-300">
+                Подтвердите email для создания напоминаний
+              </h3>
+              <p className="text-sm text-amber-700 mt-1 dark:text-amber-400">
+                Для создания напоминаний необходимо подтвердить ваш email-адрес <strong>{user.email}</strong>.
+                Проверьте почту — мы отправили письмо со ссылкой для подтверждения.
+              </p>
+              <div className="flex flex-wrap gap-3 mt-3">
+                <button
+                  onClick={handleResendVerification}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm font-medium"
+                >
+                  <Mail className="w-4 h-4" />
+                  Отправить письмо повторно
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Form Modal — только если email подтверждён */}
+      {showForm && isEmailVerified && (
         <div className="fixed top-0 left-0 right-0 bottom-0 bg-black/50 flex items-center justify-center" style={{ zIndex: 9999 }} onClick={() => { setShowForm(false); resetForm(); }}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto dark:bg-gray-800" onClick={(e) => e.stopPropagation()}>
             <h3 className={`text-xl font-semibold ${titleClass} mb-4`}>
@@ -222,7 +274,9 @@ export default function Reminders() {
         <div className={`${cardClass} p-12 text-center`}>
           <Bell className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
           <p className={mutedClass}>Нет активных напоминаний</p>
-          <p className={`text-sm ${mutedClass} mt-2`}>Создайте напоминание о платеже</p>
+          <p className={`text-sm ${mutedClass} mt-2`}>
+            {isEmailVerified ? 'Создайте напоминание о платеже' : 'Подтвердите email чтобы создавать напоминания'}
+          </p>
         </div>
       ) : (
         <div className="space-y-4">

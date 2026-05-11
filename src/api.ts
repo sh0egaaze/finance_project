@@ -44,6 +44,7 @@ export interface User {
   email: string;
   full_name: string | null;
   is_active: boolean;
+  email_verified: boolean;
   email_notifications: boolean;
   notification_email: string | null;
   tbank_connected: boolean;
@@ -324,6 +325,16 @@ class ApiClient {
       current_password: currentPassword,
       new_password: newPassword,
     });
+  }
+
+  async resendVerification(email: string): Promise<{ message: string }> {
+    const response = await axiosInstance.post('/auth/resend-verification', { email });
+    return response.data;
+  }
+
+  async checkEmailVerification(): Promise<User> {
+    const response = await axiosInstance.get('/auth/me');
+    return response.data;
   }
 
   // Categories

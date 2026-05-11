@@ -78,6 +78,153 @@ class EmailService:
             logger.error(f"Ошибка отправки email: {e}")
             return False
     
+    async def send_verification_email(
+        self,
+        to_email: str,
+        token: str,
+        base_url: str
+    ) -> bool:
+        """
+        Отправить email для подтверждения адреса.
+        
+        Args:
+            to_email: Email получателя
+            token: Токен верификации
+            base_url: Базовый URL приложения
+        
+        Returns:
+            True если отправлено успешно
+        """
+        verification_url = f"{base_url}/api/v1/auth/verify-email/{token}"
+        
+        subject = "📧 Подтвердите ваш email — FinanceApp"
+        
+        body_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    margin: 0;
+                    padding: 0;
+                    background: #f3f4f6;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+                    color: white;
+                    padding: 40px 30px;
+                    text-align: center;
+                    border-radius: 12px 12px 0 0;
+                }}
+                .header h1 {{
+                    margin: 0;
+                    font-size: 28px;
+                }}
+                .content {{
+                    background: white;
+                    padding: 40px 30px;
+                    border-radius: 0 0 12px 12px;
+                }}
+                .content h2 {{
+                    color: #1f2937;
+                    margin-top: 0;
+                }}
+                .button {{
+                    display: inline-block;
+                    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+                    color: white !important;
+                    padding: 16px 32px;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-weight: 600;
+                    font-size: 16px;
+                    margin: 24px 0;
+                }}
+                .button:hover {{
+                    opacity: 0.9;
+                }}
+                .link {{
+                    color: #3b82f6;
+                    word-break: break-all;
+                    font-size: 14px;
+                }}
+                .warning {{
+                    background: #fef3c7;
+                    border-left: 4px solid #f59e0b;
+                    padding: 12px 16px;
+                    margin: 20px 0;
+                    border-radius: 0 8px 8px 0;
+                }}
+                .footer {{
+                    text-align: center;
+                    color: #6b7280;
+                    font-size: 12px;
+                    margin-top: 24px;
+                    padding: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>💰 FinanceApp</h1>
+                </div>
+                <div class="content">
+                    <h2>Подтвердите ваш email</h2>
+                    
+                    <p>Спасибо за регистрацию в FinanceApp! Для завершения регистрации и доступа ко всем функциям приложения подтвердите ваш email-адрес.</p>
+                    
+                    <p style="text-align: center;">
+                        <a href="{verification_url}" class="button">✅ Подтвердить email</a>
+                    </p>
+                    
+                    <p>Или скопируйте эту ссылку в браузер:</p>
+                    <p class="link">{verification_url}</p>
+                    
+                    <div class="warning">
+                        <strong>⏰ Ссылка действительна 24 часа.</strong><br>
+                        После истечения срока вы можете запросить новое письмо в приложении.
+                    </div>
+                    
+                    <p style="color: #6b7280; font-size: 14px;">
+                        Если вы не регистрировались в FinanceApp, просто проигнорируйте это письмо.
+                    </p>
+                </div>
+                <div class="footer">
+                    <p>Это автоматическое сообщение, не отвечайте на него.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        body_text = f"""
+Подтвердите ваш email — FinanceApp
+
+Спасибо за регистрацию в FinanceApp!
+
+Для завершения регистрации перейдите по ссылке:
+{verification_url}
+
+⏰ Ссылка действительна 24 часа.
+
+Если вы не регистрировались в FinanceApp, проигнорируйте это письмо.
+
+---
+© 2024 FinanceApp
+        """
+        
+        return await self.send_email(to_email, subject, body_html, body_text)
+    
     async def send_reminder_notification(
         self,
         to_email: str,

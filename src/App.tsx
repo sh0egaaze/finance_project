@@ -132,7 +132,11 @@ export default function App() {
       case 'analytics':
         return <Analytics key={refreshKey} />;
       case 'reminders':
-        return <Reminders key={refreshKey} />;
+        return (
+          <div key={refreshKey}>
+            <Reminders user={user} />
+          </div>
+        );
       case 'currency':
         return <CurrencyRates />;
       case 'predictions':

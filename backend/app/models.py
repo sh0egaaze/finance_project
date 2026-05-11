@@ -1,5 +1,5 @@
 """
-Модели базы данных - ТОЧНО по схеме SQL
+Модели базы данных
 """
 import enum
 from sqlalchemy import (
@@ -14,13 +14,11 @@ from .database import Base
 
 
 # ==================== ENUMS ====================
-# ТОЧНО как в SQL: CREATE TYPE transaction_source AS ENUM ('tbank_api', 'manual');
 class TransactionSource(str, enum.Enum):
     tbank_api = 'tbank_api'
     manual = 'manual'
 
 
-# ТОЧНО как в SQL: CREATE TYPE reminder_frequency AS ENUM ('once', 'daily', 'weekly', 'monthly', 'custom');
 class ReminderFrequency(str, enum.Enum):
     once = 'once'
     daily = 'daily'
@@ -39,6 +37,12 @@ class User(Base):
     full_name = Column(String(255))
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
+    
+    # Email verification
+    email_verified = Column(Boolean, default=False)
+    email_verification_token = Column(String(255))
+    email_verification_sent_at = Column(TIMESTAMP(timezone=True))
+    
     tbank_token_encrypted = Column(String(500))
     tbank_token_salt = Column(String(32))
     email_notifications = Column(Boolean, default=True)
@@ -56,6 +60,7 @@ class User(Base):
     __table_args__ = (
         Index('ix_users_email', 'email', unique=True),
         Index('ix_users_id', 'id'),
+        Index('ix_users_verification_token', 'email_verification_token'),
     )
 
 
@@ -96,7 +101,7 @@ class CurrencyRate(Base):
     id = Column(Integer, primary_key=True)
     base_currency = Column(String(3), nullable=False)
     target_currency = Column(String(3), nullable=False)
-    rate = Column(Numeric(18, 6), nullable=False)  # DECIMAL(18,6)
+    rate = Column(Numeric(18, 6), nullable=False)
     rate_date = Column(TIMESTAMP(timezone=True), nullable=False)
     source = Column(String(100))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
@@ -116,11 +121,11 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"))  # FK на categories!
-    amount = Column(Numeric(18, 2), nullable=False)  # DECIMAL(18,2)
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"))
+    amount = Column(Numeric(18, 2), nullable=False)
     currency = Column(String(3), default='RUB')
     description = Column(String(500))
-    category_confidence = Column(Numeric(5, 4))  # DECIMAL(5,4)
+    category_confidence = Column(Numeric(5, 4))
     category_manual = Column(Boolean, default=False)
     source = Column(SQLEnum(TransactionSource, name='transaction_source', create_type=True), default=TransactionSource.manual)
     external_id = Column(String(255))
@@ -158,7 +163,7 @@ class Reminder(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     title = Column(String(255), nullable=False)
     description = Column(String(500))
-    amount = Column(Numeric(18, 2))  # DECIMAL(18,2)
+    amount = Column(Numeric(18, 2))
     currency = Column(String(3), default='RUB')
     frequency = Column(SQLEnum(ReminderFrequency, name='reminder_frequency', create_type=True), default=ReminderFrequency.once)
     interval_days = Column(Integer)
@@ -212,9 +217,9 @@ class Prediction(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"))
     prediction_month = Column(Date, nullable=False)
-    predicted_amount = Column(Numeric(18, 2), nullable=False)  # DECIMAL(18,2)
-    confidence = Column(Numeric(5, 4))  # DECIMAL(5,4)
-    actual_amount = Column(Numeric(18, 2))  # DECIMAL(18,2)
+    predicted_amount = Column(Numeric(18, 2), nullable=False)
+    confidence = Column(Numeric(5, 4))
+    actual_amount = Column(Numeric(18, 2))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     # Relationships

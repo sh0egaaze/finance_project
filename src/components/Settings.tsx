@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Bell, Shield, Link, Unlink, CheckCircle, AlertCircle, LogOut, Sun, Moon, Monitor } from 'lucide-react';
+import { User as UserIcon, Bell, Shield, Link, Unlink, CheckCircle, AlertCircle, LogOut, Sun, Moon, Monitor, Mail, RefreshCw } from 'lucide-react';
 import { api, User as UserType, TBankStatus } from '../api';
 
 interface SettingsProps {
@@ -47,10 +47,13 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
   const [tbankMessage, setTbankMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [notifyMessage, setNotifyMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [emailVerifyMessage, setEmailVerifyMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [tbankStatus, setTbankStatus] = useState<TBankStatus | null>(null);
   const [tbankToken, setTbankToken] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [isCheckingVerification, setIsCheckingVerification] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -60,7 +63,6 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
     loadTBankStatus();
   }, []);
 
-  // Слушаем изменения системной темы
   useEffect(() => {
     applyTheme(themeMode);
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -80,6 +82,38 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
       setTbankStatus(status);
     } catch (error) {
       console.error('Error loading T-Bank status:', error);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setIsResending(true);
+    setEmailVerifyMessage(null);
+    try {
+      await api.resendVerification(user.email);
+      setEmailVerifyMessage({ type: 'success', text: 'Письмо отправлено! Проверьте почту.' });
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail || 'Ошибка отправки. Попробуйте позже.';
+      setEmailVerifyMessage({ type: 'error', text: detail });
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const handleCheckVerification = async () => {
+    setIsCheckingVerification(true);
+    setEmailVerifyMessage(null);
+    try {
+      const updatedUser = await api.checkEmailVerification();
+      if (onUserUpdate) onUserUpdate(updatedUser);
+      if (updatedUser.email_verified) {
+        setEmailVerifyMessage({ type: 'success', text: 'Email подтверждён!' });
+      } else {
+        setEmailVerifyMessage({ type: 'error', text: 'Email ещё не подтверждён. Проверьте почту.' });
+      }
+    } catch {
+      setEmailVerifyMessage({ type: 'error', text: 'Ошибка проверки статуса' });
+    } finally {
+      setIsCheckingVerification(false);
     }
   };
 
@@ -179,6 +213,45 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
     <div className="space-y-6 max-w-3xl mx-auto">
       <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Настройки</h2>
 
+      {/* Баннер верификации email */}
+      {!user.email_verified && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 dark:bg-amber-900/20 dark:border-amber-800">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0 dark:bg-amber-800">
+              <Mail className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-amber-800 dark:text-amber-300">
+                Подтвердите ваш email
+              </h3>
+              <p className="text-sm text-amber-700 mt-1 dark:text-amber-400">
+                На адрес <strong>{user.email}</strong> было отправлено письмо с ссылкой для подтверждения. 
+                Без подтверждения некоторые функции недоступны (например, напоминания).
+              </p>
+              <Message message={emailVerifyMessage} />
+              <div className="flex flex-wrap gap-3 mt-3">
+                <button
+                  onClick={handleResendVerification}
+                  disabled={isResending}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors text-sm font-medium"
+                >
+                  <Mail className="w-4 h-4" />
+                  {isResending ? 'Отправка...' : 'Отправить повторно'}
+                </button>
+                <button
+                  onClick={handleCheckVerification}
+                  disabled={isCheckingVerification}
+                  className="flex items-center gap-2 px-4 py-2 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100 disabled:opacity-50 transition-colors text-sm font-medium dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/30"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isCheckingVerification ? 'animate-spin' : ''}`} />
+                  {isCheckingVerification ? 'Проверка...' : 'Я подтвердил'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Тема */}
       <div className={cardClass}>
         <div className="flex items-center gap-3 mb-4">
@@ -211,14 +284,24 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
         {/* Профиль */}
         <div className={cardClass}>
           <div className="flex items-center gap-3 mb-4">
-            <User className="w-5 h-5 text-gray-400" />
+            <UserIcon className="w-5 h-5 text-gray-400" />
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Профиль</h3>
           </div>
           <Message message={profileMessage} />
           <div className="space-y-4">
             <div>
               <label className={labelClass}>Email</label>
-              <input type="email" value={user.email} disabled className={`${inputClass} bg-gray-50 text-gray-500 dark:bg-gray-600`} />
+              <div className="relative">
+                <input type="email" value={user.email} disabled className={`${inputClass} bg-gray-50 text-gray-500 dark:bg-gray-600 pr-10`} />
+                {user.email_verified ? (
+                  <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" title="Email подтверждён" />
+                ) : (
+                  <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-500" title="Email не подтверждён" />
+                )}
+              </div>
+              <p className={`text-xs mt-1 ${user.email_verified ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                {user.email_verified ? '✓ Email подтверждён' : '⚠ Email не подтверждён'}
+              </p>
             </div>
             <div>
               <label className={labelClass}>Имя</label>
@@ -242,6 +325,11 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
               <input type="checkbox" checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} className="w-5 h-5 text-blue-600 rounded" />
               <span className="text-gray-700 dark:text-gray-300">Получать уведомления по email</span>
             </label>
+            {emailNotifications && !user.email_verified && (
+              <div className="p-3 bg-amber-50 rounded-lg text-sm text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+                ⚠ Для получения уведомлений необходимо подтвердить email
+              </div>
+            )}
             {emailNotifications && (
               <div>
                 <label className={labelClass}>Email для уведомлений</label>
