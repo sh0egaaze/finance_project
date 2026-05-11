@@ -57,6 +57,7 @@ services:
       - ./backend/logs:/app/logs
       - ./backend/app/ml/trained_models:/backend/app/ml/trained_models:ro
       - huggingface_cache:/root/.cache/huggingface
+      - ./backend/alembic/versions:/backend/alembic/versions
     restart: unless-stopped
 
   # Frontend (production build served by nginx)
