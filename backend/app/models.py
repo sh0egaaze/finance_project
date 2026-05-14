@@ -69,7 +69,7 @@ class Category(Base):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     code = Column(String(50), nullable=False)
     name = Column(String(100), nullable=False)
     name_en = Column(String(100))
