@@ -324,6 +324,10 @@ async def delete_user(
 
     email = user.email
 
+    # Удаляем связанные данные вручную (категории не имеют CASCADE)
+    db.query(Category).filter(Category.user_id == user_id).delete()
+    
+    # Логируем
     log = AuditLog(
         user_id=admin.id,
         action="delete_user",
@@ -334,6 +338,7 @@ async def delete_user(
     )
     db.add(log)
 
+    # Удаляем пользователя
     db.delete(user)
     db.commit()
 
