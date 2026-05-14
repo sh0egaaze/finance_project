@@ -27,6 +27,7 @@ services:
       dockerfile: Dockerfile
     container_name: finance_backend
     environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       DATABASE_URL: ${DATABASE_URL}
       SECRET_KEY: ${SECRET_KEY}
       DEBUG: ${DEBUG:-false}

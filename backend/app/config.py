@@ -27,6 +27,8 @@ class Settings(BaseSettings):
         "jwt-secret",
     )
 
+    PUBLIC_BASE_URL: str | None = None
+
     DEBUG: bool = False
     
     @field_validator("DEBUG")

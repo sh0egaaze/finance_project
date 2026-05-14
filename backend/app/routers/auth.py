@@ -265,6 +265,34 @@ def require_verified_email(current_user: User = Depends(get_current_user)) -> Us
         )
     return current_user
 
+def get_public_base_url(request: Request) -> str:
+    """
+    Определяет публичный URL приложения для ссылок в письмах.
+    Приоритет:
+    1. PUBLIC_BASE_URL из настроек (если задан)
+    2. X-Forwarded-Host + X-Forwarded-Proto (от nginx/tunnel)
+    3. Origin заголовок
+    4. request.base_url (fallback)
+    """
+    settings = get_settings()
+    
+    # 1. Явно заданный URL (для туннелей)
+    if settings.PUBLIC_BASE_URL:
+        return settings.PUBLIC_BASE_URL.rstrip("/")
+    
+    # 2. Заголовки от прокси
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+    if forwarded_proto and forwarded_host:
+        return f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+    
+    # 3. Origin (откуда пришёл запрос)
+    origin = request.headers.get("origin")
+    if origin:
+        return origin.rstrip("/")
+    
+    # 4. Fallback
+    return str(request.base_url).rstrip("/")
 
 # ======== Эндпоинты ========
 @router.post(
@@ -366,33 +394,25 @@ async def register(request: Request, data: UserCreate, db: Session = Depends(get
         db.commit()
         db.refresh(user)
         create_default_categories(user.id, db)
-        try:
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            create_default_categories(user.id, db)
-            
-            # Логируем регистрацию
-            audit_log = AuditLog(
-                user_id=user.id,
-                action="user_registered",
-                entity_type="user",
-                entity_id=user.id,
-                description=f"Зарегистрирован новый пользователь: {user.email}",
-                status="success"
-            )
-            db.add(audit_log)
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            raise HTTPException(status_code=400, detail="Ошибка при создании пользователя")
+        
+        # Логируем регистрацию
+        audit_log = AuditLog(
+            user_id=user.id,
+            action="user_registered",
+            entity_type="user",
+            entity_id=user.id,
+            description=f"Зарегистрирован новый пользователь: {user.email}",
+            status="success"
+        )
+        db.add(audit_log)
+        db.commit()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="Ошибка при создании пользователя")
 
     # Отправляем письмо подтверждения (асинхронно, не блокируем регистрацию при ошибке)
     try:
-        base_url = str(request.base_url).rstrip("/")
+        base_url = get_public_base_url(request)
         await email_service.send_verification_email(user.email, verification_token, base_url)
     except Exception as e:
         logger.error(f"Не удалось отправить email верификации: {e}")
@@ -577,7 +597,7 @@ async def resend_verification(
 
     # Отправляем письмо
     try:
-        base_url = str(request.base_url).rstrip("/")
+        base_url = get_public_base_url(request)
         await email_service.send_verification_email(user.email, verification_token, base_url)
     except Exception as e:
         logger.error(f"Не удалось отправить email верификации: {e}")
