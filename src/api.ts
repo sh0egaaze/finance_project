@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 
@@ -93,6 +93,7 @@ export interface TransactionCreate {
   is_income: boolean;
   category_id?: number;
   transaction_date?: string;
+  source?: string;
 }
 
 export interface TransactionUpdate {
@@ -345,8 +346,9 @@ class ApiClient {
         full_name: fullName,
       });
       return response.data;
-    } catch (error: any) {
-      const message = error.response?.data?.detail || error.message;
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError<{ detail?: string }>;
+      const message = axiosError.response?.data?.detail || axiosError.message;
       throw new Error(message);
     }
   }
@@ -361,8 +363,9 @@ class ApiClient {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
       return response.data;
-    } catch (error: any) {
-      const message = error.response?.data?.detail || error.message;
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError<{ detail?: string }>;
+      const message = axiosError.response?.data?.detail || axiosError.message;
       throw new Error(message);
     }
   }
@@ -497,7 +500,7 @@ class ApiClient {
   }
 
   async getAnalytics(period?: string, dateFrom?: string, dateTo?: string): Promise<AnalyticsData> {
-    const params: any = {};
+    const params: Record<string, string> = {};
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
     if (!dateFrom && !dateTo && period) params.period = period;

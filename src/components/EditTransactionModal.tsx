@@ -13,8 +13,8 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({ tran
   const [amount, setAmount] = useState(Math.abs(Number(transaction.amount)).toString());
   const [isExpense, setIsExpense] = useState(!transaction.is_income);
   const [categoryId, setCategoryId] = useState<number | null>(transaction.category_id);
-  const [date, setDate] = useState(new Date(transaction.transaction_date).toLocaleDateString('en-CA'));
-  const [time, setTime] = useState(new Date(transaction.transaction_date).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }));
+  const [date, setDate] = useState(transaction.transaction_date ? new Date(transaction.transaction_date).toLocaleDateString('en-CA') : new Date().toLocaleDateString('en-CA'));
+  const [time, setTime] = useState(transaction.transaction_date ? new Date(transaction.transaction_date).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '12:00');
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,12 +62,12 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({ tran
   };
 
   const labelClass = "block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300";
-  const inputClass = "w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400";
+  const inputClass = "w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 text-sm sm:text-base";
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md dark:bg-gray-800">
-        <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto overflow-x-hidden dark:bg-gray-800">
+        <div className="sticky top-0 bg-white dark:bg-gray-800 flex items-center justify-between p-4 border-b dark:border-gray-700">
           <h2 className="text-lg font-semibold dark:text-white">Редактирование транзакции</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors dark:hover:bg-gray-700">
             <X className="w-5 h-5 dark:text-gray-400" />
@@ -88,7 +88,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({ tran
           </div>
 
           {/* Сумма и тип */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className={labelClass}>Сумма</label>
               <input
@@ -132,7 +132,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({ tran
           </div>
 
           {/* Дата и время */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelClass}>Дата</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
@@ -155,14 +155,14 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({ tran
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+              className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
             >
               Отмена
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Сохранить

@@ -22,7 +22,7 @@ const formatCurrency = (value: number) => {
 // Единые стили для графиков
 const chartStyles = {
   grid: { stroke: '#374151', strokeDasharray: '3 3', opacity: 0.2 },
-  tick: { fill: '#9CA3AF', fontSize: 12 },
+  tick: { fill: '#9CA3AF', fontSize: 11 },
   tooltip: { backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#F9FAFB' },
   itemStyle: { color: '#F9FAFB' },
 };
@@ -51,8 +51,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
     loadDashboard();
   }, []);
 
-  const cardClass = "bg-white rounded-xl shadow-sm border border-gray-100 p-5 dark:bg-gray-800 dark:border-gray-700";
-  const titleClass = "text-lg font-semibold text-gray-900 dark:text-white";
+  const cardClass = "bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 dark:bg-gray-800 dark:border-gray-700";
+  const titleClass = "text-base sm:text-lg font-semibold text-gray-900 dark:text-white";
   const subtitleClass = "text-gray-500 dark:text-gray-400";
   const emptyClass = "text-gray-400 text-center py-4 dark:text-gray-500";
   const iconBtnClass = "p-1 hover:bg-gray-100 rounded-lg transition-colors dark:hover:bg-gray-700";
@@ -100,14 +100,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Приветствие */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
             Привет, {user.full_name || 'Пользователь'}! 👋
           </h1>
-          <p className={subtitleClass}>Вот что происходит с вашими финансами</p>
+          <p className={`${subtitleClass} text-sm sm:text-base`}>Вот что происходит с вашими финансами</p>
         </div>
         <button onClick={loadDashboard} className="p-2 hover:bg-gray-100 rounded-lg transition-colors dark:hover:bg-gray-700" title="Обновить">
           <RefreshCw className="w-5 h-5 text-gray-500 dark:text-gray-400" />
@@ -118,19 +118,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
       <SmartInput onTransactionAdded={loadDashboard} />
 
       {/* Карточки статистики */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {statCards.map((card) => {
           const Icon = card.icon;
           const colors = colorClasses[card.color];
           return (
             <div key={card.title} className={cardClass}>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{card.title}</span>
-                <div className={`p-2 rounded-lg ${colors.bg}`}>
-                  <Icon className={`w-5 h-5 ${colors.icon}`} />
+              <div className="flex items-center justify-between mb-2 sm:mb-3">
+                <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">{card.title}</span>
+                <div className={`p-1.5 sm:p-2 rounded-lg ${colors.bg}`}>
+                  <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${colors.icon}`} />
                 </div>
               </div>
-              <div className={`text-2xl font-bold ${colors.text}`}>
+              <div className={`text-lg sm:text-2xl font-bold ${colors.text} truncate`}>
                 {formatValue(card.value, card.format)}
               </div>
             </div>
@@ -139,12 +139,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
       </div>
 
       {/* Графики */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Тренд */}
         <div className={cardClass}>
           <h3 className={`${titleClass} mb-4`}>Динамика</h3>
           {monthly_trend && monthly_trend.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={200}>
               <LineChart data={monthly_trend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                 <XAxis
@@ -155,7 +155,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
                     return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
                   }}
                 />
-                <YAxis tick={chartStyles.tick} tickFormatter={(v) => Number(v).toLocaleString('ru-RU')} width={70} />
+                <YAxis tick={chartStyles.tick} tickFormatter={(v) => Number(v).toLocaleString('ru-RU')} width={50} />
                 <Tooltip
                   formatter={(value, name) => [formatCurrency(Number(value)), name === 'income' ? 'Доходы' : 'Расходы']}
                   labelFormatter={(label) => new Date(label).toLocaleDateString('ru-RU')}
@@ -163,12 +163,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
                   itemStyle={chartStyles.itemStyle}
                   labelStyle={chartStyles.itemStyle}
                 />
-                <Line type="monotone" dataKey="income" name="income" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                <Line type="monotone" dataKey="expense" name="expense" stroke="#EF4444" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                <Line type="monotone" dataKey="income" name="income" stroke="#10B981" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="expense" name="expense" stroke="#EF4444" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-[250px] flex items-center justify-center text-gray-400 dark:text-gray-500">
+            <div className="h-[200px] flex items-center justify-center text-gray-400 dark:text-gray-500">
               Нет данных для отображения
             </div>
           )}
@@ -177,7 +177,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
         {/* Категории */}
         <div className={cardClass}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className={titleClass}>{showIncome ? 'Доходы по категориям' : 'Расходы по категориям'}</h3>
+            <h3 className={titleClass}>{showIncome ? 'Доходы' : 'Расходы'}</h3>
             <button onClick={() => setShowIncome(!showIncome)} className={iconBtnClass} title={showIncome ? 'Показать расходы' : 'Показать доходы'}>
               <ArrowRight className="w-5 h-5 text-gray-400 hover:text-blue-500 transition-colors" />
             </button>
@@ -185,31 +185,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
           {(() => {
             const categoryData = showIncome ? (data.income_by_category || []) : (spending_by_category || []);
             return categoryData.length > 0 ? (
-              <div className="flex items-center gap-4">
-                <ResponsiveContainer width="50%" height={200}>
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                <ResponsiveContainer width="100%" height={160} className="sm:w-1/2">
                   <PieChart>
-                    <Pie data={categoryData} dataKey="amount" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80}>
-                      {categoryData.map((entry: any, index: number) => (
+                    <Pie data={categoryData} dataKey="amount" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70}>
+                      {categoryData.map((entry: { color?: string }, index: number) => (
                         <Cell key={index} fill={entry.color || (showIncome ? '#22c55e' : '#6B7280')} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: any) => [formatCurrency(Number(value))]} contentStyle={chartStyles.tooltip} itemStyle={chartStyles.itemStyle} labelStyle={chartStyles.itemStyle} />
+                    <Tooltip formatter={(value) => [formatCurrency(Number(value))]} contentStyle={chartStyles.tooltip} itemStyle={chartStyles.itemStyle} labelStyle={chartStyles.itemStyle} />
                   </PieChart>
                 </ResponsiveContainer>
-                <div className="flex-1 space-y-2">
-                  {categoryData.slice(0, 5).map((cat: any) => (
+                <div className="flex-1 space-y-2 w-full sm:w-auto">
+                  {categoryData.slice(0, 4).map((cat: { name: string; amount: number; color?: string; category?: string }) => (
                     <div key={cat.category || cat.name} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color || (showIncome ? '#22c55e' : '#6B7280') }} />
-                        <span className="text-sm text-gray-600 dark:text-gray-300">{cat.name}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color || (showIncome ? '#22c55e' : '#6B7280') }} />
+                        <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate">{cat.name}</span>
                       </div>
-                      <span className="text-sm font-medium dark:text-white">{cat.amount.toLocaleString('ru-RU')} ₽</span>
+                      <span className="text-xs sm:text-sm font-medium dark:text-white shrink-0 ml-2">{cat.amount.toLocaleString('ru-RU')} ₽</span>
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
-              <div className="h-[200px] flex items-center justify-center text-gray-400 dark:text-gray-500">
+              <div className="h-[160px] flex items-center justify-center text-gray-400 dark:text-gray-500">
                 {showIncome ? 'Нет доходов' : 'Нет расходов'}
               </div>
             );
@@ -218,7 +218,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
       </div>
 
       {/* Нижняя секция */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Последние транзакции */}
         <div className={cardClass}>
           <div className="flex items-center justify-between mb-4">
@@ -227,18 +227,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
               <ArrowRight className="w-5 h-5 text-gray-400 hover:text-blue-500" />
             </button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {recent_transactions && recent_transactions.length > 0 ? (
               recent_transactions.slice(0, 5).map((tx) => (
                 <div key={tx.id} className="flex items-center justify-between py-2 border-b last:border-0 dark:border-gray-700">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{tx.description || 'Без описания'}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">{tx.description || 'Без описания'}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(tx.transaction_date).toLocaleDateString('ru-RU')}{' '}
-                      {new Date(tx.transaction_date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                      {tx.transaction_date ? new Date(tx.transaction_date).toLocaleDateString('ru-RU') : ''}{' '}
+                      {tx.transaction_date ? new Date(tx.transaction_date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''}
                     </p>
                   </div>
-                  <span className={`font-medium ${Number(tx.amount) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  <span className={`font-medium text-sm shrink-0 ml-2 ${Number(tx.amount) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {Number(tx.amount) >= 0 ? '+' : ''}{Number(tx.amount).toLocaleString('ru-RU')} ₽
                   </span>
                 </div>
@@ -253,19 +253,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
         <div className={cardClass}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" />
               <h3 className={titleClass}>Подозрительные</h3>
             </div>
             <button onClick={() => onTabChange?.('suspicious')} className={iconBtnClass} title="Все подозрительные">
               <ArrowRight className="w-5 h-5 text-gray-400 hover:text-blue-500" />
             </button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {suspicious_transactions && suspicious_transactions.length > 0 ? (
               suspicious_transactions.slice(0, 3).map((tx) => (
-                <div key={tx.id} className="p-3 bg-amber-50 rounded-lg border border-amber-200 dark:bg-amber-900/30 dark:border-amber-700">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{tx.description || 'Без описания'}</p>
-                  <p className="text-xs text-amber-600 dark:text-amber-400">{tx.suspicious_reason}</p>
+                <div key={tx.id} className="p-2 sm:p-3 bg-amber-50 rounded-lg border border-amber-200 dark:bg-amber-900/30 dark:border-amber-700">
+                  <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">{tx.description || 'Без описания'}</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 truncate">{tx.suspicious_reason}</p>
                   <p className="text-sm font-bold text-red-600 mt-1 dark:text-red-400">{Number(tx.amount).toLocaleString('ru-RU')} ₽</p>
                 </div>
               ))
@@ -276,19 +276,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onTabChange }) => {
         </div>
 
         {/* Ближайшие платежи */}
-        <div className={cardClass}>
+        <div className={`${cardClass} md:col-span-2 lg:col-span-1`}>
           <div className="flex items-center gap-2 mb-4">
-            <Bell className="w-5 h-5 text-blue-500" />
+            <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
             <h3 className={titleClass}>Ближайшие платежи</h3>
             <button onClick={() => onTabChange?.('reminders')} className={`${iconBtnClass} ml-auto`} title="Все напоминания">
               <ArrowRight className="w-5 h-5 text-gray-400 hover:text-blue-500" />
             </button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {upcoming_reminders && upcoming_reminders.length > 0 ? (
               upcoming_reminders.slice(0, 3).map((rem) => (
-                <div key={rem.id} className="p-3 bg-blue-50 rounded-lg border border-blue-200 dark:bg-blue-900/30 dark:border-blue-700">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{rem.title}</p>
+                <div key={rem.id} className="p-2 sm:p-3 bg-blue-50 rounded-lg border border-blue-200 dark:bg-blue-900/30 dark:border-blue-700">
+                  <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">{rem.title}</p>
                   <p className="text-xs text-blue-600 dark:text-blue-400">{new Date(rem.next_reminder_date).toLocaleDateString('ru-RU')}</p>
                   {rem.amount && <p className="text-sm font-bold text-gray-900 mt-1 dark:text-white">{Number(rem.amount).toLocaleString('ru-RU')} ₽</p>}
                 </div>

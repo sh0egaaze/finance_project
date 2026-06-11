@@ -11,11 +11,11 @@ interface SettingsProps {
 function Message({ message }: { message: { type: 'success' | 'error'; text: string } | null }) {
   if (!message) return null;
   return (
-    <div className={`p-3 rounded-lg flex items-center gap-2 mb-4 text-sm ${
+    <div className={`p-3 rounded-lg flex items-center gap-2 mb-4 text-xs sm:text-sm ${
       message.type === 'success' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'
     }`}>
       {message.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-      {message.text}
+      <span className="break-words">{message.text}</span>
     </div>
   );
 }
@@ -91,8 +91,9 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
     try {
       await api.resendVerification(user.email);
       setEmailVerifyMessage({ type: 'success', text: 'Письмо отправлено! Проверьте почту.' });
-    } catch (error: any) {
-      const detail = error?.response?.data?.detail || 'Ошибка отправки. Попробуйте позже.';
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { detail?: string } } };
+      const detail = e?.response?.data?.detail || 'Ошибка отправки. Попробуйте позже.';
       setEmailVerifyMessage({ type: 'error', text: detail });
     } finally {
       setIsResending(false);
@@ -169,8 +170,9 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch (error: any) {
-      const detail = error?.response?.data?.detail || 'Неверный текущий пароль';
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { detail?: string } } };
+      const detail = e?.response?.data?.detail || 'Неверный текущий пароль';
       setPasswordMessage({ type: 'error', text: detail });
     } finally {
       setIsSaving(false);
@@ -204,36 +206,35 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
     }
   };
 
-  const inputClass = "w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400";
-  const cardClass = "bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700";
-  const labelClass = "block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300";
-  const btnPrimary = "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm font-medium";
+  const inputClass = "w-full px-3 sm:px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 text-sm sm:text-base";
+  const cardClass = "bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 dark:bg-gray-800 dark:border-gray-700";
+  const labelClass = "block text-xs sm:text-sm font-medium text-gray-700 mb-1 dark:text-gray-300";
+  const btnPrimary = "px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-xs sm:text-sm font-medium";
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Настройки</h2>
+    <div className="space-y-4 sm:space-y-6 max-w-3xl mx-auto">
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">Настройки</h2>
 
       {/* Баннер верификации email */}
       {!user.email_verified && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 dark:bg-amber-900/20 dark:border-amber-800">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0 dark:bg-amber-800">
-              <Mail className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 sm:p-5 dark:bg-amber-900/20 dark:border-amber-800">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0 dark:bg-amber-800">
+              <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 dark:text-amber-400" />
             </div>
-            <div className="flex-1">
-              <h3 className="text-base font-semibold text-amber-800 dark:text-amber-300">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm sm:text-base font-semibold text-amber-800 dark:text-amber-300">
                 Подтвердите ваш email
               </h3>
-              <p className="text-sm text-amber-700 mt-1 dark:text-amber-400">
-                На адрес <strong>{user.email}</strong> было отправлено письмо с ссылкой для подтверждения. 
-                Без подтверждения некоторые функции недоступны (например, напоминания).
+              <p className="text-xs sm:text-sm text-amber-700 mt-1 dark:text-amber-400">
+                На адрес <strong className="break-all">{user.email}</strong> было отправлено письмо.
               </p>
               <Message message={emailVerifyMessage} />
-              <div className="flex flex-wrap gap-3 mt-3">
+              <div className="flex flex-wrap gap-2 sm:gap-3 mt-3">
                 <button
                   onClick={handleResendVerification}
                   disabled={isResending}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors text-sm font-medium"
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors text-xs sm:text-sm font-medium"
                 >
                   <Mail className="w-4 h-4" />
                   {isResending ? 'Отправка...' : 'Отправить повторно'}
@@ -241,7 +242,7 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
                 <button
                   onClick={handleCheckVerification}
                   disabled={isCheckingVerification}
-                  className="flex items-center gap-2 px-4 py-2 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100 disabled:opacity-50 transition-colors text-sm font-medium dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/30"
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100 disabled:opacity-50 transition-colors text-xs sm:text-sm font-medium dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/30"
                 >
                   <RefreshCw className={`w-4 h-4 ${isCheckingVerification ? 'animate-spin' : ''}`} />
                   {isCheckingVerification ? 'Проверка...' : 'Я подтвердил'}
@@ -256,9 +257,9 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
       <div className={cardClass}>
         <div className="flex items-center gap-3 mb-4">
           <Sun className="w-5 h-5 text-gray-400" />
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Оформление</h3>
+          <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white">Оформление</h3>
         </div>
-        <div className="flex gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {([
             { mode: 'light' as ThemeMode, icon: Sun, label: 'Светлая' },
             { mode: 'dark' as ThemeMode, icon: Moon, label: 'Тёмная' },
@@ -267,25 +268,25 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
             <button
               key={mode}
               onClick={() => handleThemeChange(mode)}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 transition-all text-sm font-medium ${
+              className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 rounded-xl border-2 transition-all text-xs sm:text-sm font-medium ${
                 themeMode === mode
                   ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                   : 'border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-600 dark:text-gray-400 dark:hover:border-gray-500'
               }`}
             >
-              <Icon className="w-5 h-5" />
-              {label}
+              <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="hidden xs:inline">{label}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Профиль */}
         <div className={cardClass}>
           <div className="flex items-center gap-3 mb-4">
             <UserIcon className="w-5 h-5 text-gray-400" />
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Профиль</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white">Профиль</h3>
           </div>
           <Message message={profileMessage} />
           <div className="space-y-4">
@@ -294,9 +295,9 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
               <div className="relative">
                 <input type="email" value={user.email} disabled className={`${inputClass} bg-gray-50 text-gray-500 dark:bg-gray-600 pr-10`} />
                 {user.email_verified ? (
-                  <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" title="Email подтверждён" />
+                  <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
                 ) : (
-                  <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-500" title="Email не подтверждён" />
+                  <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-amber-500" />
                 )}
               </div>
               <p className={`text-xs mt-1 ${user.email_verified ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
@@ -317,17 +318,17 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
         <div className={cardClass}>
           <div className="flex items-center gap-3 mb-4">
             <Bell className="w-5 h-5 text-gray-400" />
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Уведомления</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white">Уведомления</h3>
           </div>
           <Message message={notifyMessage} />
           <div className="space-y-4">
             <label className="flex items-center gap-3 cursor-pointer">
-              <input type="checkbox" checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} className="w-5 h-5 text-blue-600 rounded" />
-              <span className="text-gray-700 dark:text-gray-300">Получать уведомления по email</span>
+              <input type="checkbox" checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 rounded" />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Получать уведомления по email</span>
             </label>
             {emailNotifications && !user.email_verified && (
-              <div className="p-3 bg-amber-50 rounded-lg text-sm text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
-                ⚠ Для получения уведомлений необходимо подтвердить email
+              <div className="p-2 sm:p-3 bg-amber-50 rounded-lg text-xs sm:text-sm text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+                ⚠ Для уведомлений необходимо подтвердить email
               </div>
             )}
             {emailNotifications && (
@@ -344,28 +345,28 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
         <div className={cardClass}>
           <div className="flex items-center gap-3 mb-4">
             <Link className="w-5 h-5 text-gray-400" />
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Т-Банк</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white">Т-Банк</h3>
           </div>
           <Message message={tbankMessage} />
           {tbankStatus?.connected ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                <CheckCircle className="w-5 h-5" />
-                <span className="font-medium">Подключено</span>
+                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="font-medium text-sm sm:text-base">Подключено</span>
               </div>
               {tbankStatus.balance !== null && (
-                <p className="text-gray-600 dark:text-gray-300">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
                   Баланс: {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: tbankStatus.currency || 'RUB' }).format(tbankStatus.balance)}
                 </p>
               )}
-              <button onClick={handleDisconnectTBank} className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20">
+              <button onClick={handleDisconnectTBank} className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-xs sm:text-sm dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20">
                 <Unlink className="w-4 h-4" />
                 Отключить
               </button>
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-gray-500 text-sm dark:text-gray-400">Подключите Т-Банк для автоматической загрузки транзакций</p>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Подключите Т-Банк для автоматической загрузки транзакций</p>
               <div>
                 <label className={labelClass}>Токен API</label>
                 <input type="password" value={tbankToken} onChange={(e) => setTbankToken(e.target.value)} placeholder="t.xxxxx..." className={inputClass} />
@@ -374,7 +375,7 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
                   <a href="https://www.tbank.ru/invest/settings/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">tbank.ru/invest/settings</a>
                 </p>
               </div>
-              <button onClick={handleConnectTBank} disabled={isConnecting || !tbankToken.trim()} className="flex items-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 transition-colors text-sm font-medium">
+              <button onClick={handleConnectTBank} disabled={isConnecting || !tbankToken.trim()} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 transition-colors text-xs sm:text-sm font-medium">
                 <Link className="w-4 h-4" />
                 {isConnecting ? 'Подключение...' : 'Подключить'}
               </button>
@@ -386,7 +387,7 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
         <div className={cardClass}>
           <div className="flex items-center gap-3 mb-4">
             <Shield className="w-5 h-5 text-gray-400" />
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Безопасность</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white">Безопасность</h3>
           </div>
           <Message message={passwordMessage} />
           <div className="space-y-4">
@@ -410,8 +411,8 @@ export default function Settings({ user, onLogout, onUserUpdate }: SettingsProps
 
       {/* Выход */}
       <div className={cardClass}>
-        <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors dark:text-red-400 dark:hover:bg-red-900/20">
-          <LogOut className="w-5 h-5" />
+        <button onClick={onLogout} className="flex items-center gap-2 px-3 sm:px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors dark:text-red-400 dark:hover:bg-red-900/20 text-sm sm:text-base">
+          <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
           Выйти из аккаунта
         </button>
       </div>

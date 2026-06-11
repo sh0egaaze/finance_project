@@ -23,24 +23,25 @@ export const SmartInput: React.FC<SmartInputProps> = ({ onTransactionAdded }) =>
       setText('');
       onTransactionAdded();
       setTimeout(() => setSuccess(false), 2000);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Не удалось добавить транзакцию');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || 'Не удалось добавить транзакцию');
     } finally {
       setLoading(false);
     }
   };
 
   const getInputClass = () => {
-    const base = "w-full pl-4 pr-12 py-4 text-lg border-2 rounded-xl transition-colors focus:outline-none dark:bg-gray-700 dark:text-white dark:placeholder-gray-400";
+    const base = "w-full pl-4 pr-12 py-3 sm:py-4 text-base sm:text-lg border-2 rounded-xl transition-colors focus:outline-none dark:bg-gray-700 dark:text-white dark:placeholder-gray-400";
     if (success) return `${base} border-green-500 bg-green-50 dark:bg-green-900/30 dark:border-green-500`;
     if (error) return `${base} border-red-300 bg-red-50 dark:bg-red-900/30 dark:border-red-500`;
     return `${base} border-gray-200 focus:border-blue-500 dark:border-gray-600 dark:focus:border-blue-500`;
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
-      <h2 className="text-lg font-semibold text-gray-900 mb-2 dark:text-white">Быстрый ввод</h2>
-      <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
+      <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2 dark:text-white">Быстрый ввод</h2>
+      <p className="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4 dark:text-gray-400">
         Просто напишите, например: &quot;кофе 250&quot; или &quot;зарплата 85000&quot;
       </p>
 
@@ -70,16 +71,16 @@ export const SmartInput: React.FC<SmartInputProps> = ({ onTransactionAdded }) =>
         </div>
 
         {error && (
-          <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200 flex items-center gap-2 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400">
-            <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">{error}</span>
+          <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-red-50 rounded-lg border border-red-200 flex items-center gap-2 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="text-xs sm:text-sm">{error}</span>
           </div>
         )}
 
         {success && (
-          <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200 flex items-center gap-2 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400">
+          <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-green-50 rounded-lg border border-green-200 flex items-center gap-2 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400">
             <Check className="w-4 h-4" />
-            Транзакция добавлена!
+            <span className="text-xs sm:text-sm">Транзакция добавлена!</span>
           </div>
         )}
       </form>

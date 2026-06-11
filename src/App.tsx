@@ -23,6 +23,7 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     const theme = localStorage.getItem('theme') || 'system';
@@ -107,12 +108,17 @@ export default function App() {
     refreshData();
   };
 
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    setIsSidebarOpen(false);
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center dark:bg-gray-900">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-500">Загрузка...</p>
+          <p className="text-gray-500 dark:text-gray-400">Загрузка...</p>
         </div>
       </div>
     );
@@ -127,7 +133,7 @@ export default function App() {
 
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard key={refreshKey} user={user} onTabChange={setActiveTab} />;
+        return <Dashboard key={refreshKey} user={user} onTabChange={handleTabChange} />;
       case 'transactions':
         return <Transactions key={refreshKey} categories={categories} />;
       case 'analytics':
@@ -155,18 +161,25 @@ export default function App() {
     }
   };
 
-      return (
+  return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex overflow-hidden">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} user={user} />
+      <Sidebar 
+        activeTab={activeTab} 
+        onTabChange={handleTabChange} 
+        user={user}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
       
       <div className="flex-1 flex flex-col min-w-0">
         <Header 
           user={user} 
           onLogout={handleLogout}
           onAddTransaction={() => setIsAddModalOpen(true)}
+          onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)}
         />
         
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-y-auto">
           {renderContent()}
         </main>
       </div>
